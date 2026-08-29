@@ -1,0 +1,44 @@
+/* Kumone for Android — mobile additions (narrow screens). */
+@media (max-width: 860px) {
+  html, body { height: auto; min-height: 100%; overflow: hidden; }
+
+  #sidebar { width: 158px; }
+  .brand { padding: 14px 12px 8px; gap: 8px; }
+  .brand-logo { width: 28px; height: 28px; font-size: 15px; }
+  .brand-name { font-size: 15px; }
+  #nav { padding: 4px 8px; }
+  .nav-item { font-size: 13px; padding: 8px 10px; }
+  .pl-nav-item { padding: 6px 10px; }
+  .pl-nav-item img { width: 26px; height: 26px; }
+  #view { padding: 14px 12px 18px; }
+  h1.page-title { font-size: 18px; margin-bottom: 12px; }
+  .section-title { font-size: 15px; margin: 18px 0 10px; }
+
+  .grid { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 12px; }
+  .card img { border-radius: 8px; }
+  .card .card-name { font-size: 12px; }
+
+  /* Playerbar */
+  #playerbar {
+    display: flex; flex-wrap: wrap; align-items: center;
+    gap: 4px 8px; padding: 8px 10px 10px;
+  }
+  #pb-track { flex: 0 0 100%; }
+  #pb-track img { width: 40px; height: 40px; border-radius: 6px; }
+  #pb-title { font-size: 13px; }
+  #pb-artist { font-size: 11px; }
+  .pb-center { flex: 1 1 auto; min-width: 0; }
+  .pb-right { display: none; }
+  .pb-controls button { min-width: 32px; height: 32px; font-size: 15px; }
+  .pb-progress { gap: 4px; }
+  #pb-cur, #pb-dur { font-size: 11px; }
+
+  /* Panels and modals */
+  #panel { inset: auto 0 0 0; width: auto !important; max-height: 60%; border-radius: 14px 14px 0 0; }
+  #login-modal { max-width: 88vw; }
+  #prompt-modal { max-width: 88vw; }
+
+  /* Tables */
+  td, th { font-size: 12px; }
+  .t-name, .t-title { font-size: 12px; }
+}

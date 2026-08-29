@@ -1,0 +1,26 @@
+{
+  "name": "kumone-android",
+  "version": "0.1.4",
+  "description": "Kumone — NetEase Cloud Music client for Android (Capacitor wrapper of the web kernel)",
+  "license": "MIT",
+  "dependencies": {
+    "@capacitor/android": "^7.0.0",
+    "@capacitor/core": "^7.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.0.0",
+    "crypto-js": "^4.2.0",
+    "esbuild": "^0.25.0",
+    "http-server": "^14.1.1",
+    "qrcode": "^1.5.4",
+    "typescript": "^7.0.2"
+  },
+  "scripts": {
+    "web": "npx http-server www -p 8100 -c-1",
+    "bundle:qrcode": "esbuild node_modules/qrcode/lib/browser.js --bundle --format=iife --global-name=QRCode --outfile=www/vendor/qrcode.bundle.js",
+    "sync": "cap sync android",
+    "open:android": "cap open android",
+    "build:android": "npm run sync && cd android && gradlew assembleDebug",
+    "build:apk": "npm run sync && cd android && gradlew assembleRelease"
+  }
+}

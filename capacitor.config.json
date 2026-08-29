@@ -1,0 +1,11 @@
+{
+  "appId": "com.kumone.music",
+  "appName": "Kumone",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  },
+  "android": {
+    "backgroundColor": "#17171a"
+  }
+}

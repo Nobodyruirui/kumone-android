@@ -1,0 +1,75 @@
+name: Build Android APK
+
+# 云端自动打包：无需本机安装 Android Studio / SDK。
+# 两种用法：
+#   1) 推到 main 分支         -> 构建 APK 并作为 Actions artifact 上传
+#   2) 打一个 v* 版本标签      -> 构建 APK 并发布成公开的 GitHub Release，
+#                               手机浏览器打开 Releases 页即可直接下载安装
+#   3) 手动在 Actions 页触发    -> 同上按情况处理
+
+on:
+  push:
+    branches: [main, master]
+    tags: ['v*']
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Sync web assets to Android
+        run: npx cap sync android
+
+      # Debug APK 由 Android 自带的 debug keystore 自动签名，可直接安装到手机。
+      - name: Build Debug APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug
+          ls -la app/build/outputs/apk/debug/
+
+      - name: Rename APK
+        run: |
+          mkdir -p dist
+          cp android/app/build/outputs/apk/debug/app-debug.apk "dist/kumone-${GITHUB_REF_NAME}.apk"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kumone-apk
+          path: dist/*.apk
+          if-no-files-found: error
+
+      # 打 v* 标签时，把 APK 发成公开 Release，手机浏览器可直接下载。
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.apk
+          generate_release_notes: true
+          draft: false
+          prerelease: false
