@@ -80,12 +80,12 @@ public class HTTPClientPlugin extends Plugin {
                     ret.put("data", body);
                     ret.put("headers", respHeaders);
 
-                    runOnUiThread(new Runnable() {
+                    getActivity().runOnUiThread(new Runnable() {
                         @Override
                         public void run() { call.resolve(ret); }
                     });
                 } catch (final Exception e) {
-                    runOnUiThread(new Runnable() {
+                    getActivity().runOnUiThread(new Runnable() {
                         @Override
                         public void run() { call.reject("HTTP error: " + e.getMessage()); }
                     });
