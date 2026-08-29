@@ -75,23 +75,37 @@ npm run web     # 打开 http://localhost:8100
 
 ---
 
-## 拿到可安装 APK（推荐，本机零安卓环境）
+## 手机直接下载安装（推荐，本机零安卓环境）
 
-利用 GitHub Actions 在云端自动装 SDK 并打 APK，你的电脑不用装 Android Studio / SDK。
+利用 GitHub Actions 在云端自动装 SDK 并打 APK，再发布成**公开 GitHub Release**，手机浏览器直接打开就能下载安装，全程你的电脑不用装 Android Studio / SDK。
 
-1. 把本目录推到 GitHub 仓库（私有也可）：
+1. **建一个公开的 GitHub 仓库**，然后把本工程推上去。仓库必须**公开**，手机才能免登录直接下载：
+
    ```bash
-   git init
-   git add .
-   git commit -m "kumone for android"
+   cd F:\test\kumone-android
    git remote add origin https://github.com/<你的用户名>/kumone-android.git
    git push -u origin main
    ```
-2. 打开仓库 → **Actions** 页，`Build Android APK` 工作流会在 `push` 时自动运行（也可点 **Run workflow** 手动触发）。
-3. 运行完成后，在该次运行的 **Artifacts** 区域下载 `kumone-debug-apk`，解压即得到 `app-debug.apk`。
-4. 把 `app-debug.apk` 传到手机（或用浏览器访问 release）安装。Android 允许安装未知来源即可。
 
-> 说明：默认构建的是 `debug` 版 APK（无需签名，可直接安装）。如需发布给他人安装，应在正式版本里配置签名 keystore（属可选项，未内置）。
+2. **打一个版本标签**——这一步会触发云端构建，并把 APK 自动发布成 Release：
+
+   ```bash
+   git tag v1.0.0
+   git push origin v1.0.0
+   ```
+
+3. 等几分钟（Actions 跑完后），手机浏览器打开下面的 Releases 页，点 **`kumone-v1.0.0.apk`** 下载安装（Android 允许未知来源即可）：
+
+   ```
+   https://github.com/<你的用户名>/kumone-android/releases
+   ```
+
+   也可以直接用下载直链（打开即下）：
+   ```
+   https://github.com/<你的用户名>/kumone-android/releases/download/v1.0.0/kumone-v1.0.0.apk
+   ```
+
+> APK 由 Android 自带的 debug keystore 自动签名，可直接安装。功能确认满意后，如需正式发布给他人，再配置签名 keystore（属可选项）。
 
 ---
 
