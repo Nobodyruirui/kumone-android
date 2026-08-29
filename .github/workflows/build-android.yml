@@ -29,11 +29,12 @@ jobs:
           node-version: '20'
           cache: npm
 
-      - name: Set up JDK 17
+      # Capacitor 7 的 android 模块要求 Java 21（avax source release 21），必须用 JDK 21 编译。
+      - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: '21'
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
