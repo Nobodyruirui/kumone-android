@@ -1,0 +1,183 @@
+/* =============================================================
+ * Kumone for Android — Apple Music 风格 · 手机端布局
+ * -------------------------------------------------------------
+ * 桌面上那套「左侧栏 + 底部横条」在手机上很别扭，这一层把它换成
+ * iOS 的三段式：
+ *   顶部：吸顶大标题（滚动后收缩成居中小标题）
+ *   底部：浮动迷你播放条 + Tab Bar
+ *   全屏：正在播放页（隐藏 Tab Bar 和迷你条）
+ * ============================================================= */
+
+@media (max-width: 860px) {
+  :root {
+    --tabbar-h: 54px;
+    --mini-h: 58px;
+    --safe-b: env(safe-area-inset-bottom, 0px);
+  }
+
+  html, body { height: auto; min-height: 100%; overflow: hidden; }
+
+  /* 侧边栏在手机上换成 Tab Bar */
+  #sidebar { display: none; }
+
+  #app { display: block; }
+
+  #main {
+    height: 100%; overflow-y: auto; -webkit-overflow-scrolling: touch;
+    padding-bottom: calc(var(--mini-h) + var(--tabbar-h) + var(--safe-b) + 22px);
+  }
+
+  #view { padding: 0 16px 20px; }
+
+  /* 大标题 */
+  h1.page-title {
+    font-size: 32px; font-weight: 700; letter-spacing: -0.7px;
+    margin: 4px 0 16px; padding-top: 4px;
+  }
+  .section-title { font-size: 20px; margin: 24px 0 10px; letter-spacing: -0.3px; }
+
+  /* 吸顶栏 */
+  .app-header {
+    height: 44px; padding: 0 8px;
+    padding-top: env(safe-area-inset-top, 0px);
+    height: calc(44px + env(safe-area-inset-top, 0px));
+    background: rgba(0, 0, 0, 0.62);
+  }
+  body.light .app-header { background: rgba(255, 255, 255, 0.62); }
+  .ah-title { font-size: 17px; font-weight: 600; }
+
+  /* 卡片网格 */
+  .grid { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 18px 12px; }
+  .card img { border-radius: 8px; }
+  .card .card-name { font-size: 13px; margin-top: 6px; -webkit-line-clamp: 2; }
+  .card .card-sub { font-size: 11px; }
+  .card .play-overlay { width: 30px; height: 30px; right: 6px; bottom: 6px; opacity: 1; transform: none; }
+
+  /* 详情头部：改成 iOS 那种竖排大图 */
+  .detail-head { flex-direction: column; align-items: stretch; gap: 14px; }
+  .detail-head img { width: 62%; max-width: 260px; align-self: center; border-radius: var(--radius-lg); }
+  .detail-head h2 { font-size: 22px; }
+  .detail-head .dh-line { font-size: 14px; }
+
+  /* 列表 */
+  .track-table td { padding: 11px 4px; font-size: 15px; }
+  .t-name { max-width: 46vw; }
+  .t-artist { max-width: 26vw; }
+  .t-album { display: none; }
+
+  /* 搜索 */
+  .search-bar input { font-size: 16px; padding: 9px 12px; border-radius: 10px; }
+
+  /* 按钮 */
+  .btn { font-size: 15px; padding: 10px 18px; }
+
+  /* ---------------- 迷你播放条（浮动在 Tab Bar 上方） ---------------- */
+  #playerbar {
+    position: fixed; left: 10px; right: 10px;
+    bottom: calc(var(--tabbar-h) + var(--safe-b) + 8px);
+    height: var(--mini-h);
+    z-index: 60;
+    display: flex; align-items: center; gap: 8px;
+    padding: 0 8px 0 8px;
+    background: var(--blur);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    backdrop-filter: saturate(180%) blur(20px);
+    border: 0.5px solid var(--separator);
+    border-radius: 12px;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+  }
+  .pb-line { border-radius: 12px 12px 0 0; }
+  .pb-left { width: auto; flex: 1 1 auto; min-width: 0; gap: 9px; }
+  #pb-cover { width: 42px; height: 42px; border-radius: 7px; }
+  #pb-title { font-size: 14px; }
+  #pb-artist { font-size: 12px; }
+  .pb-center { flex: 0 0 auto; max-width: none; width: auto; margin: 0; flex-direction: row; }
+  .pb-controls { gap: 4px; }
+  .pb-controls button { min-width: 34px; height: 34px; font-size: 15px; }
+  .pb-controls #btn-mode, .pb-controls #btn-like { display: none; }
+  .pb-play { width: 34px !important; height: 34px !important; font-size: 14px !important; }
+  .pb-progress { display: none; }
+  .pb-right { display: none; }
+
+  /* ---------------- Tab Bar ---------------- */
+  .tabbar {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 70;
+    height: calc(var(--tabbar-h) + var(--safe-b));
+    padding-bottom: var(--safe-b);
+    display: flex; align-items: stretch;
+    background: var(--blur);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    backdrop-filter: saturate(180%) blur(20px);
+    border-top: 0.5px solid var(--separator);
+  }
+  .tab-item {
+    flex: 1; border: none; background: none; cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 3px; color: var(--text-faint); font-family: inherit;
+    padding: 6px 0 4px;
+  }
+  .tab-item .tab-ico { display: block; width: 24px; height: 24px; }
+  .tab-item .tab-ico svg { width: 24px; height: 24px; display: block; }
+  .tab-item .tab-lb { font-size: 10px; font-weight: 500; letter-spacing: 0.1px; }
+  .tab-item.active { color: var(--accent); }
+  .tab-item:active { opacity: 0.6; }
+
+  /* ---------------- 滑出面板（手机上从底部弹起） ---------------- */
+  #panel {
+    inset: auto 0 0 0; width: auto !important;
+    max-height: 72vh;
+    border-radius: 16px 16px 0 0;
+    border-left: none; border-top: 0.5px solid var(--separator);
+    background: var(--bg-elev);
+    box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.6);
+    padding-bottom: calc(var(--mini-h) + var(--tabbar-h) + var(--safe-b));
+  }
+  #panel-content { padding: 16px; }
+  .panel-title { font-size: 19px; }
+
+  /* 弹窗 */
+  #login-modal, #prompt-modal { max-width: 88vw; width: 340px; }
+  .lm-qr img { width: 200px; height: 200px; }
+
+  /* ---------------- 正在播放页：全屏 ---------------- */
+  .np-page {
+    display: block; height: 100%;
+    padding: calc(56px + env(safe-area-inset-top, 0px)) 22px
+             calc(var(--mini-h) + var(--tabbar-h) + var(--safe-b) + 24px);
+    overflow-y: auto;
+  }
+  .np-left { width: auto; padding-top: 0; align-items: center; }
+  .np-cover {
+    width: min(78vw, 330px); height: min(78vw, 330px);
+    border-radius: 10px; box-shadow: 0 18px 46px rgba(0, 0, 0, 0.62);
+  }
+  .np-title { font-size: 20px; margin-top: 20px; width: 100%; }
+  .np-sub { font-size: 15px; }
+  .np-close { display: none; }
+  .np-lyrics {
+    padding: 26px 0 20vh; margin-top: 10px;
+    overflow: visible; height: auto;
+  }
+  .np-lyrics .lyrics-line { font-size: 20px; padding: 9px 6px; }
+  .np-lyrics .lyrics-line.current { font-size: 22px; }
+  .np-lyrics .tl { font-size: 15px; }
+
+  .np-topbar {
+    position: fixed;
+    top: env(safe-area-inset-top, 0px); left: 0; right: 0;
+    padding: 8px 12px;
+  }
+  .np-tb-btn { background: rgba(44, 44, 46, 0.6); }
+
+  /* 播放页全屏时，隐藏 Tab Bar 和迷你条 */
+  body.np-mode .tabbar,
+  body.np-mode #playerbar { display: none; }
+  body.np-mode #main { padding-bottom: 24px; }
+}
+
+/* 极窄屏（<380px）再收一档 */
+@media (max-width: 380px) {
+  .grid { grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); }
+  h1.page-title { font-size: 28px; }
+  .np-cover { width: min(80vw, 300px); height: min(80vw, 300px); }
+}

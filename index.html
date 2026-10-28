@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; img-src 'self' https: http: data: blob:; media-src 'self' https: http: blob:; style-src 'self' 'unsafe-inline'; connect-src 'self' https://music.163.com https://interface.music.163.com https://api.github.com https: http:; font-src 'self' https:">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Kumone</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style-mobile.css">
+</head>
+<body>
+  <div id="app">
+    <aside id="sidebar">
+      <div class="brand">
+        <div class="brand-logo">く</div>
+        <div class="brand-name">Kumone</div>
+      </div>
+      <nav id="nav">
+        <button class="nav-item active" data-view="home">发现</button>
+        <button class="nav-item" data-view="search">搜索</button>
+        <button class="nav-item" data-view="fm" id="nav-fm">私人 FM</button>
+      </nav>
+      <div class="side-section" id="library-section" hidden>
+        <div class="side-title" id="library-owner">我的音乐</div>
+        <div id="playlist-nav"></div>
+      </div>
+      <div class="side-footer">
+        <div id="account-chip" role="button" tabindex="0">
+          <img id="account-avatar" alt="">
+          <span id="account-name">未登录</span>
+        </div>
+      </div>
+    </aside>
+
+    <main id="main">
+      <div id="view"></div>
+    </main>
+  </div>
+
+  <div id="playerbar">
+    <div class="pb-left" id="pb-track" role="button" tabindex="0" title="正在播放">
+      <img id="pb-cover" alt="">
+      <div class="pb-meta">
+        <div id="pb-title">未在播放</div>
+        <div id="pb-artist"></div>
+      </div>
+    </div>
+    <div class="pb-center">
+      <div class="pb-controls">
+        <button id="btn-mode" title="播放模式">🔁</button>
+        <button id="btn-prev" title="上一首">⏮</button>
+        <button id="btn-play" class="pb-play" title="播放/暂停">▶</button>
+        <button id="btn-next" title="下一首">⏭</button>
+        <button id="btn-like" title="喜欢">♡</button>
+      </div>
+      <div class="pb-progress">
+        <span id="pb-cur">0:00</span>
+        <input type="range" id="pb-seek" min="0" max="1000" value="0">
+        <span id="pb-dur">0:00</span>
+      </div>
+    </div>
+    <div class="pb-right">
+      <span id="pb-served" class="pb-served" title=""></span>
+      <select id="pb-quality" title="音质">
+        <option value="standard">标准</option>
+        <option value="higher">较高</option>
+        <option value="exhigh">极高</option>
+        <option value="lossless" selected>无损</option>
+        <option value="hires">Hi-Res</option>
+      </select>
+      <button id="btn-similar" title="相似歌曲">✦</button>
+      <button id="btn-lyrics" title="歌词">词</button>
+      <button id="btn-queue" title="播放队列">☰</button>
+      <button id="btn-settings" title="设置">⚙</button>
+      <input type="range" id="pb-volume" min="0" max="100" value="90" title="音量">
+    </div>
+  </div>
+
+  <div id="panel" hidden>
+    <div id="panel-content"></div>
+  </div>
+
+  <div id="modal-backdrop" hidden>
+    <div id="login-modal">
+      <div class="lm-title">扫码登录</div>
+      <div class="lm-sub">使用网易云音乐 App 扫码登录</div>
+      <div class="lm-qr"><img id="qr-img" alt="登录二维码"></div>
+      <div id="qr-status">正在获取二维码…</div>
+      <button id="qr-refresh" class="lm-refresh" hidden>点击刷新二维码</button>
+      <div class="lm-cancel" id="login-cancel" role="button" tabindex="0">取消</div>
+    </div>
+  </div>
+
+  <div id="prompt-backdrop" hidden>
+    <div id="prompt-modal">
+      <div class="pm-title" id="prompt-title">输入</div>
+      <input type="text" id="prompt-input">
+      <div class="pm-buttons">
+        <button class="btn" id="prompt-cancel">取消</button>
+        <button class="btn primary" id="prompt-ok">确定</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="add-menu" hidden></div>
+  <div id="toasts"></div>
+
+  <!-- 网易云内核（浏览器版） -->
+  <script src="vendor/crypto-js.js"></script>
+  <script src="kumone/lib/crypto.js"></script>
+  <script src="kumone/lib/client.js"></script>
+  <script src="kumone/lib/api.js"></script>
+  <script src="kumone/lib/unblock.js"></script>
+  <script src="vendor/qrcode.bundle.js"></script>
+  <script src="kumone/bridge.js"></script>
+  <!-- 前端应用 -->
+  <script src="app.js"></script>
+  <!-- Apple Music 风格皮肤层（外挂，不改上游代码；删掉这两行即可回退原样） -->
+  <script src="apple-theme.js"></script>
+  <script src="apple-lyrics.js"></script>
+</body>
+</html>
