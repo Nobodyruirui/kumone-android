@@ -142,6 +142,12 @@ async function run() {
 
     ok('没有曲目时是空状态', doc.querySelectorAll('#m-view .m-np-empty').length === 1);
     ok('空状态不是空白页', doc.getElementById('m-view').textContent.indexOf('还没有在放什么') >= 0);
+    ok('没有曲目时正常态那一整套必须藏起来',
+      W.getComputedStyle(doc.querySelector('#m-view .m-np-live')).display === 'none',
+      'display=' + W.getComputedStyle(doc.querySelector('#m-view .m-np-live')).display);
+    ok('没有曲目时不露出播放控件',
+      doc.querySelectorAll('#m-view .m-np-live .m-np-btn').length > 0 &&
+      W.getComputedStyle(doc.querySelector('#m-view .m-np-live')).display === 'none');
     ok('全屏时底部导航消失', doc.body.classList.contains('m-np'));
     ok('全屏时迷你条真的不可见',
       W.getComputedStyle(doc.getElementById('m-mini')).display === 'none');

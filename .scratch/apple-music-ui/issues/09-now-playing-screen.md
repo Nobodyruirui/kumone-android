@@ -86,3 +86,5 @@
 - **踩过的坑**：
   - **首帧被静默跳过**：首屏 `paint()` 是在 `render()` 里同步调的，那时片段还没挂进 DOM，`body.isConnected` 还是 false，于是界面永远停在空状态。修法是改用「视图是否存活」的标志（`alive`），而不是 `isConnected` —— `isConnected` 适合判断**异步回填**，不适合判断**首次绘制**。这条与 ticket 08 的「骨架被替换」是同一个根因的两面。
   - **控件名与快照名不一致**：按钮写的是 `aria-label="收起播放页"`、文字是「收起」，快照里的无障碍名取 aria-label，于是模型按「收起」找不到。语义名应该统一成短名。
+  - **`hidden` 被作者样式压过（ego 验收时抓到）**：空状态与正常态用 `hidden` 属性切换，但 `.m-np-live { display: flex }` 是作者样式，优先级高于 UA 的 `[hidden] { display: none }` —— 于是「还没有在放什么」时，下面那整套封面/进度/控件**一起露了出来**。肉眼在桌面宽窗口下不明显，在 390×844 的手机视口下一眼就看见。修法是显式写 `.m-np-live[hidden] { display: none; }`，并在 `test/fixtures/probe-nowplaying.html` 里加了断言（「没有曲目时正常态那一整套必须藏起来」）。
+    **教训**：凡是用 `hidden` 属性做显隐切换的元素，作者样式里就不能给它写 `display` —— 或者必须补一条 `[hidden]` 的兜底。

@@ -823,6 +823,9 @@ body.m-np #m-header { display: none; }
   display: flex;
   flex-direction: column;
 }
+/* 关键：作者样式的 display 会压过 UA 的 [hidden]{display:none}，
+   所以显式写一条，否则「没有在放什么」时下面那整套控件会一起露出来 */
+.m-np-live[hidden] { display: none; }
 .m-np-cover {
   width: 100%;
   aspect-ratio: 1;
