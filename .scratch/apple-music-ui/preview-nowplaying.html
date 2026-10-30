@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<title>Kumone 全屏播放页 · 示意图</title>
+<style>
+  html,body { margin:0; background:#f4f4f6; }
+  .phone { width:390px; height:844px; overflow:hidden; background:#fff; }
+  iframe { width:390px; height:844px; border:0; display:block; }
+</style>
+</head>
+<body>
+<!--
+  全屏播放页示意图。
+  播放引擎换成**假播放器**（真引擎要真音频与真地址），
+  但界面、控件、语义都是真的 —— 截图只为看清版式。
+-->
+<div class="phone"><iframe id="app" src="/www/index.html"></iframe></div>
+<script>
+  var frame = document.getElementById('app');
+  frame.addEventListener('load', function () {
+    var w = frame.contentWindow;
+    var M = w.Mobile;
+
+    var TRACK = {
+      id: 11, name: 'Prima Oară', durationMS: 220000,
+      artists: [{ id: 1, name: 'Kamelia / Studio 66' }],
+      album: { id: 2, name: 'Studio 66', picUrl: 'https://p1.music.126.net/x.jpg' }
+    };
+
+    var subs = [];
+    var state = {
+      playing: true,
+      track: TRACK,
+      trackName: TRACK.name,
+      artist: 'Kamelia / Studio 66',
+      album: 'Studio 66',
+      cover: TRACK.album.picUrl,
+      position: 96,
+      duration: 220,
+      quality: 'standard',
+      requestedQuality: 'exhigh',
+      volume: 0.8,
+      repeat: 'off',
+      queueLength: 30,
+      index: 0,
+      playNextLength: 0,
+      error: null
+    };
+    function emit() { subs.slice().forEach(function (fn) { fn(state); }); }
+
+    M.player = {
+      state: function () { return state; },
+      subscribe: function (fn) { subs.push(fn); return function () {
+        var i = subs.indexOf(fn); if (i >= 0) subs.splice(i, 1);
+      }; },
+      toggle: function () { state.playing = !state.playing; emit(); return state; },
+      next: function () { emit(); return state; },
+      prev: function () { emit(); return state; },
+      seek: function (t) { state.position = t; emit(); return state; },
+      setVolume: function (v) { state.volume = v; emit(); return state; },
+      setQuality: function (q) { state.requestedQuality = q; emit(); return state; },
+      playQueue: function () { emit(); return state; },
+      queueItems: function () { return [TRACK]; },
+      history: function () { return []; },
+      persist: function () {}, restore: function () {}
+    };
+
+    M.nav({ type: 'nowplaying' });
+  });
+</script>
+</body>
+</html>

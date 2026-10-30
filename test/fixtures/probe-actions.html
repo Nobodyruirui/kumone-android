@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<title>Kumone 动作层与错误契约自检</title>
+<style>
+  body { font: 13px/1.6 system-ui, sans-serif; margin: 20px; }
+  iframe { width: 390px; height: 700px; border: 1px solid #ddd; }
+  pre { background: #0a0a0a; color: #e8e8ea; padding: 12px; border-radius: 10px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<!--
+  自检探针：以「模型」的视角驱动这个 App。
+  验证：
+    1. Mobile.snapshot() 能拿到带稳定 ref 的语义树
+    2. Mobile.act(ref, 'click') 能真的驱动界面（切到资料库）
+    3. 用过期 ref 操作时，返回的是稳定错误码 + 五要素消息（含"下一步该干什么"），
+       而不是一句抱怨或静默失败
+-->
+<iframe id="app" src="/www/index.html"></iframe>
+<pre id="result" data-result="PENDING">PENDING</pre>
+
+<script>
+var out = document.getElementById('result');
+function finish(ok, message) {
+  out.setAttribute('data-result', ok ? 'PASS' : 'FAIL');
+  out.textContent = (ok ? 'PASS ' : 'FAIL ') + message;
+}
+function findRef(tree, role, name) {
+  var re = new RegExp(role + ' "' + name + '" \\[ref=(@\\d+)');
+  var m = tree.match(re);
+  return m ? m[1] : null;
+}
+
+var frame = document.getElementById('app');
+frame.addEventListener('load', function () {
+  setTimeout(run, 700);
+});
+
+function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+async function run() {
+  try {
+    var M = frame.contentWindow.Mobile;
+
+    // 1. 快照拿到导航按钮的 ref
+    var snap = M.snapshot();
+    if (!snap.ok) return finish(false, 'snapshot 未返回 ok');
+    var ref = findRef(snap.tree, 'button', '资料库');
+    if (!ref) return finish(false, '快照里找不到「资料库」按钮的 ref');
+
+    // 2. 点击它，界面应当切到资料库
+    //    注意两件事：
+    //    a) 资料库有 guard —— 未登录时点它会直接拉起扫码（ticket 10 的新契约），
+    //       这里先假装已登录，单独验证「act 能不能真的驱动界面」；
+    //       「未登录 → 拉起扫码」由 test/library-view.mjs 负责。
+    //    b) guard 是异步的（要先问登录态），所以点完要等一拍再断言。
+    M.service.isLoggedIn = function () { return Promise.resolve(true); };
+    var receipt = M.act(ref, 'click');
+    if (!receipt.ok) return finish(false, 'act 失败：' + JSON.stringify(receipt));
+
+    await wait(300);
+    var snap2 = M.snapshot();
+    if (!/view "library"/.test(snap2.tree)) {
+      return finish(false, '点击后没有切到资料库视图');
+    }
+
+    // 3. 过期 ref 必须给出稳定错误码 + 五要素
+    var bad = M.act('@999999', 'click');
+    if (bad.ok !== false) return finish(false, '过期 ref 居然成功了');
+    if (bad.code !== 'KUMONE_STALE_REF') {
+      return finish(false, '过期 ref 返回了错误码 ' + bad.code + '，应为 KUMONE_STALE_REF');
+    }
+    if (!bad.next) return finish(false, '过期 ref 的错误没有「下一步该干什么」');
+    if (!bad.message || bad.message.indexOf('Next:') < 0) {
+      return finish(false, '错误消息缺少五要素里的 Next');
+    }
+
+    // 4. 不在白名单里的动作应报「功能未实现」，不静默忽略
+    var nope = M.act(ref, 'explode');
+    if (nope.code !== 'KUMONE_UNSUPPORTED') {
+      return finish(false, '未知动作返回 ' + nope.code + '，应为 KUMONE_UNSUPPORTED');
+    }
+
+    finish(true,
+      'ref=' + ref + ' 点击后进入资料库；过期 ref 返回 ' + bad.code + '；未知动作返回 ' + nope.code);
+  } catch (e) {
+    finish(false, '异常：' + (e && e.message ? e.message : String(e)));
+  }
+}
+</script>
+</body>
+</html>

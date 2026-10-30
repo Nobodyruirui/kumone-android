@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<title>Kumone 试用探针：真实数据链路</title>
+<style>
+  body { font: 13px/1.6 system-ui, sans-serif; margin: 20px; }
+  iframe { width: 390px; height: 700px; border: 1px solid #ddd; float: right; }
+  pre { background: #0a0a0a; color: #e8e8ea; padding: 12px; border-radius: 10px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<!--
+  试用探针：验证「服务层 → 内核 → 网易云真实接口」这条链路在浏览器里通不通。
+  桌面浏览器直连网易云会被 CORS 拦 —— 这里给 iframe 注入本地 CORS 中继
+  （tools/net-relay.js），内核层零改动，只是换了个 fetch 出口。
+  安卓 App 走原生桥，本来就没这问题。
+-->
+<iframe id="app" src="/www/index.html"></iframe>
+<pre id="result" data-result="PENDING">PENDING</pre>
+
+<script>
+var out = document.getElementById('result');
+function finish(ok, message) {
+  out.setAttribute('data-result', ok ? 'PASS' : 'FAIL');
+  out.textContent = (ok ? 'PASS ' : 'FAIL ') + message;
+}
+function lines(arr, n) {
+  return (arr || []).slice(0, n || 5).map(function (x) {
+    return '· ' + (x.name || x.nickname || '(无名)') + (x.artists && x.artists.length ? ' — ' + x.artists.map(function (a) { return a.name; }).join('/') : '');
+  }).join('\n');
+}
+
+var frame = document.getElementById('app');
+frame.addEventListener('load', function () {
+  var w = frame.contentWindow;
+  w.KUMONE_RELAY_BASE = 'http://127.0.0.1:8111';
+  var s = w.document.createElement('script');
+  s.src = '/tools/net-relay.js';
+  s.onload = function () { setTimeout(run, 400); };
+  s.onerror = function () { finish(false, '注入中继脚本失败'); };
+  w.document.head.appendChild(s);
+});
+
+function run() {
+  var M = frame.contentWindow.Mobile;
+  if (!M || !M.service) return finish(false, '没有 Mobile.service');
+  Promise.resolve()
+    .then(function () { return M.service.dailyRecommend(); })
+    .then(function (r) {
+      if (!r.ok) {
+        return finish(false, '每日推荐失败：' + r.code + ' / ' + (r.message || '').split('\n').slice(0, 3).join(' | '));
+      }
+      var text = '每日推荐 ' + r.data.length + ' 首：\n' + lines(r.data);
+      return M.service.toplists().then(function (t) {
+        if (!t.ok) return finish(false, '排行榜失败：' + t.code);
+        text += '\n\n排行榜 ' + t.data.length + ' 个：\n' + lines(t.data);
+        return M.service.account().then(function (a) {
+          text += '\n\n账号：' + (a.ok ? (a.data ? a.data.nickname : '未登录') : a.code);
+          finish(true, text);
+        });
+      });
+    })
+    .catch(function (e) { finish(false, '异常：' + (e && e.message ? e.message : String(e))); });
+}
+</script>
+</body>
+</html>

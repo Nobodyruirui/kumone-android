@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<title>Kumone 移动端预览</title>
+<style>
+  body { margin:0; background:#f4f4f6; font-family:'Inter',-apple-system,'Microsoft YaHei',sans-serif;
+         display:flex; gap:22px; padding:22px; justify-content:center; align-items:flex-start; }
+  .wrap { display:flex; flex-direction:column; }
+  .phone { width:390px; height:844px; border-radius:34px; overflow:hidden; background:#000;
+           border:8px solid #dcdcdc; box-shadow:0 10px 30px rgba(10,10,10,.10); }
+  iframe { width:390px; height:844px; border:0; display:block; }
+  .cap { color:rgba(10,10,10,.56); font-size:13px; text-align:center; margin-top:10px; }
+  .model { width:430px; }
+  .model pre { margin:0; background:#0a0a0a; color:#e8e8ea; border-radius:16px; padding:16px 18px;
+               font:12px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace; white-space:pre;
+               overflow:auto; height:744px; }
+  .model h2 { font-size:13px; font-weight:800; letter-spacing:.2px; margin:0 0 8px; }
+  .model .note { font-size:12px; font-style:italic; font-weight:300; color:rgba(10,10,10,.56); margin:0 0 10px; }
+</style>
+</head>
+<body>
+  <div class="wrap"><div class="phone"><iframe id="f1" src="/www/index.html#home"></iframe></div><div class="cap">主页</div></div>
+  <div class="wrap"><div class="phone"><iframe id="f2" src="/www/index.html#library"></iframe></div><div class="cap">资料库</div></div>
+  <div class="model">
+    <h2>模型读到的那一棵树</h2>
+    <p class="note">same DOM, another projection</p>
+    <pre id="tree">loading…</pre>
+  </div>
+</body>
+<script>
+  var frame = document.getElementById('f1');
+  frame.addEventListener('load', function () {
+    setTimeout(function () {
+      try {
+        var M = frame.contentWindow.Mobile;
+        var snap = M.snapshot();
+        document.getElementById('tree').textContent = snap.tree;
+      } catch (e) {
+        document.getElementById('tree').textContent = 'snapshot failed: ' + e.message;
+      }
+    }, 600);
+  });
+</script>
+</html>

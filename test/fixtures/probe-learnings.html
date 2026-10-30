@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<title>Kumone 知识包（浏览器侧）自检</title>
+<style>
+  body { font: 13px/1.6 system-ui, sans-serif; margin: 20px; }
+  iframe { width: 390px; height: 700px; border: 1px solid #ddd; }
+  pre { background: #0a0a0a; color: #e8e8ea; padding: 12px; border-radius: 10px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<!--
+  自检探针：知识包在真实应用里能不能用。
+  验证：
+    1. 入口按 manifest.loadOrder 加载后，KumoneLearnings.netease 的 4 个工具都在
+    2. 工具走的是 role+name 定位（不依赖临时 ref），未命中/歧义都返回契约错误
+    3. 播放状态能读到（迷你播放条降级路径）
+-->
+<iframe id="app" src="/www/index.html"></iframe>
+<pre id="result" data-result="PENDING">PENDING</pre>
+
+<script>
+var out = document.getElementById('result');
+function finish(ok, message) {
+  out.setAttribute('data-result', ok ? 'PASS' : 'FAIL');
+  out.textContent = (ok ? 'PASS ' : 'FAIL ') + message;
+}
+
+var frame = document.getElementById('app');
+frame.addEventListener('load', function () {
+  setTimeout(function () {
+    var notes = [];
+    try {
+      var w = frame.contentWindow;
+      var K = w.KumoneLearnings && w.KumoneLearnings.netease;
+      if (!K) return finish(false, 'KumoneLearnings.netease 没挂到全局（入口没按 loadOrder 加载？）');
+
+      ['openPlaylistByName', 'listPlaylists', 'currentPlayback', 'togglePlayback'].forEach(function (fn) {
+        if (typeof K[fn] !== 'function') return finish(false, '缺少工具 ' + fn);
+      });
+
+      Promise.resolve()
+        .then(function () { return K.listPlaylists(); })
+        .then(function (r) {
+          if (!r || r.ok !== true) return finish(false, 'listPlaylists 未返回 ok：' + JSON.stringify(r));
+          notes.push('listPlaylists ok，count=' + r.count);
+
+          return K.openPlaylistByName('');
+        })
+        .then(function (r) {
+          if (!r || r.ok !== false || r.code !== 'KUMONE_EMPTY_RESULT') {
+            return finish(false, '空参数应返回 KUMONE_EMPTY_RESULT，实得 ' + JSON.stringify(r));
+          }
+          if (!r.next) return finish(false, 'KUMONE_EMPTY_RESULT 缺少「下一步」');
+          notes.push('空参数 → ' + r.code);
+
+          return K.openPlaylistByName('一定不存在的歌单XYZ');
+        })
+        .then(function (r) {
+          if (!r || r.ok !== false || r.code !== 'KUMONE_NOT_FOUND') {
+            return finish(false, '未命中应返回 KUMONE_NOT_FOUND，实得 ' + JSON.stringify(r));
+          }
+          notes.push('未命中 → ' + r.code);
+
+          return K.currentPlayback();
+        })
+        .then(function (r) {
+          if (!r || r.ok !== true) return finish(false, 'currentPlayback 未返回 ok：' + JSON.stringify(r));
+          notes.push('播放状态 source=' + r.source + ' playing=' + r.playing);
+
+          return K.togglePlayback();
+        })
+        .then(function (r) {
+          if (!r || r.ok !== true) return finish(false, 'togglePlayback 未返回 ok：' + JSON.stringify(r));
+          notes.push('播放开关动作 ' + r.action + ' 于「' + r.name + '」');
+
+          finish(true, notes.join('；'));
+        })
+        .catch(function (e) {
+          finish(false, '异常：' + (e && e.message ? e.message : String(e)));
+        });
+    } catch (e) {
+      finish(false, '异常：' + (e && e.message ? e.message : String(e)));
+    }
+  }, 800);
+});
+</script>
+</body>
+</html>

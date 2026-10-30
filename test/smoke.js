@@ -1,7 +1,8 @@
 'use strict';
 // Smoke test: verify the browser kernel loads, cookie jar works, decode handles errors.
-const clientMod = require('F:/test/kumone-android/www/kumone/lib/client.js');
-const api = require('F:/test/kumone-android/www/kumone/lib/api.js');
+const path = require('path');
+const clientMod = require(path.join(__dirname, '..', 'www', 'kumone', 'lib', 'client.js'));
+const api = require(path.join(__dirname, '..', 'www', 'kumone', 'lib', 'api.js'));
 
 let ok = true;
 function check(name, cond) {

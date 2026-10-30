@@ -1,0 +1,123 @@
+{
+  "schema": "kumone.learnings/1",
+  "site": "netease",
+  "name": "网易云音乐 · Kumone 移动端",
+  "version": "0.1.0",
+  "updated": "2026-10-29",
+  "description": "网易云移动端渲染层的稳定定位器知识包：把「怎么稳定地找到某个元素」沉淀成可执行的制品，而不是散文。",
+  "entry": {
+    "global": "KumoneLearnings.netease",
+    "loadOrder": [
+      "tools/locator.js",
+      "tools/playlist.js",
+      "tools/playback.js"
+    ],
+    "node": "require('www/mobile/learnings/netease/tools/playlist.js')",
+    "note": "浏览器里按 loadOrder 依次用 script 标签加载；Node 里逐个 require。"
+  },
+  "locator": {
+    "grammar": "role+name",
+    "semanticSource": "Mobile.snapshot() 的无障碍文本树",
+    "priority": [
+      "role + name 精确匹配",
+      "限定区块（region 的无障碍名）后再精确匹配",
+      "role + name 包含匹配"
+    ],
+    "forbidden": [
+      "临时引用（快照里的短标识，界面一重建就失效）",
+      "像素坐标",
+      "DOM id 选择器",
+      "用 CSS class 做定位"
+    ],
+    "actions": [
+      "click",
+      "scroll",
+      "focus"
+    ]
+  },
+  "errorCodes": {
+    "KUMONE_EMPTY_RESULT": "参数缺失或查询条件为空",
+    "KUMONE_NOT_FOUND": "role+name 没有命中任何元素",
+    "KUMONE_AMBIGUOUS_TARGET": "role+name 命中多个元素",
+    "KUMONE_UNSUPPORTED": "当前环境没有 Mobile 感知层/动作层",
+    "KUMONE_STALE_REF": "命中节点在动作执行前已失效"
+  },
+  "tools": [
+    {
+      "name": "openPlaylistByName",
+      "file": "tools/playlist.js",
+      "description": "按名称打开一个歌单：先在语义树里按 role+name 命中，再对命中的节点执行点击。",
+      "async": true,
+      "returns": "{ ok, name, role, section, view, action } | 契约错误",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": true,
+          "description": "歌单名称，与语义树里的无障碍名精确匹配"
+        },
+        {
+          "name": "options",
+          "type": "object",
+          "required": false,
+          "description": "可选；{ scope } 限定区块的无障碍名，例如「为你推荐」"
+        }
+      ]
+    },
+    {
+      "name": "listPlaylists",
+      "file": "tools/playlist.js",
+      "description": "列出当前界面上可点的歌单/卡片类元素及其所属区块。",
+      "async": true,
+      "returns": "{ ok, items: [{ name, role, section }], count, view } | 契约错误",
+      "args": [
+        {
+          "name": "options",
+          "type": "object",
+          "required": false,
+          "description": "可选；{ scope } 限定区块的无障碍名"
+        }
+      ]
+    },
+    {
+      "name": "currentPlayback",
+      "file": "tools/playback.js",
+      "description": "读当前播放状态摘要；优先走 player.state() 契约，读不到再降级到迷你播放条语义。",
+      "async": true,
+      "returns": "{ ok, playing, trackName, artist, position, duration, source, view } | 契约错误",
+      "args": []
+    },
+    {
+      "name": "togglePlayback",
+      "file": "tools/playback.js",
+      "description": "播放/暂停切换：点迷你播放条里的播放开关（无障碍名「播放」或「暂停」）。",
+      "async": true,
+      "returns": "{ ok, action, name, wasPlaying, nowPlaying, view } | 契约错误",
+      "args": []
+    }
+  ],
+  "helpers": [
+    {
+      "name": "locator",
+      "file": "tools/locator.js",
+      "description": "定位器内核：解析语义树、按 role+name 匹配、把命中节点交给动作层，并自持一份错误契约。"
+    }
+  ],
+  "notes": [
+    {
+      "file": "notes/locators.md",
+      "title": "稳定定位器总览",
+      "summary": "role+name 的语法、优先级、歧义与未命中的处理约定，以及被禁用的定位形式。"
+    },
+    {
+      "file": "notes/sections.md",
+      "title": "区块与卡片定位表",
+      "summary": "各页面区块（每日推荐 / 为你推荐 / 排行榜 / 推荐歌手）与卡片、按钮的无障碍名约定。"
+    },
+    {
+      "file": "notes/playback.md",
+      "title": "播放状态契约",
+      "summary": "迷你播放条的无障碍语义、播放状态字段的来源与降级顺序。"
+    }
+  ]
+}

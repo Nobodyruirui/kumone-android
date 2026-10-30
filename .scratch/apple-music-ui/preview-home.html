@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<title>Kumone 主页 · 真实数据预览</title>
+<style>
+  html,body { margin:0; background:#f4f4f6; }
+  .phone { width:390px; height:844px; overflow:hidden; background:#fff;
+           border:0; }
+  iframe { width:390px; height:844px; border:0; display:block; }
+</style>
+</head>
+<body>
+<!--
+  真实数据预览页：给「先出图看效果」用。
+  做两件事：
+    1. 给 App 注入 tools/net-relay.js（把网易云请求改走本地 CORS 中继）
+    2. 重新渲染，让主页用真实数据填上
+  内核层零改动 —— 只是换了个 fetch 出口。
+-->
+<div class="phone"><iframe id="app" src="/www/index.html#home"></iframe></div>
+<script>
+  // ?h=2600 可以截长图（把手机拉高，一次看全五个区块）
+  var H = parseInt((location.search.match(/h=(\d+)/) || [])[1] || '844', 10);
+  var frame = document.getElementById('app');
+  var phone = document.querySelector('.phone');
+  phone.style.height = H + 'px';
+  frame.style.height = H + 'px';
+  frame.addEventListener('load', function () {
+    var w = frame.contentWindow;
+    w.KUMONE_RELAY_BASE = 'http://127.0.0.1:8111';
+    var s = w.document.createElement('script');
+    s.src = '/tools/net-relay.js';
+    s.onload = function () {
+      setTimeout(function () {
+        try { w.Mobile.render(); } catch (e) {}
+        // ?scroll=N 滚到指定位置（截下半屏）
+        var sc = parseInt((location.search.match(/scroll=(\d+)/) || [])[1] || '0', 10);
+        if (sc) {
+          var main = w.document.getElementById('m-main');
+          if (main) main.scrollTop = sc;
+        }
+      }, 120);
+    };
+    w.document.head.appendChild(s);
+  });
+</script>
+</body>
+</html>

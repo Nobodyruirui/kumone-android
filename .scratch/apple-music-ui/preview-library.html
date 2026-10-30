@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<title>Kumone 资料库 · 示意图</title>
+<style>
+  html,body { margin:0; background:#f4f4f6; }
+  .phone { width:390px; height:844px; overflow:hidden; background:#fff; }
+  iframe { width:390px; height:844px; border:0; display:block; }
+</style>
+</head>
+<body>
+<!--
+  资料库示意图。
+  资料库要登录才有内容，而本机没法真的扫码，所以这里给 App 注入一份
+  **示意数据**（假的账号与列表），只为看清版式与角色色。
+  数据是真的服务层接口时，界面长得一模一样。
+-->
+<div class="phone"><iframe id="app" src="/www/index.html"></iframe></div>
+<script>
+  var frame = document.getElementById('app');
+  frame.addEventListener('load', function () {
+    var w = frame.contentWindow;
+    var M = w.Mobile;
+
+    var TRACK = function (id, name, who, album) {
+      return {
+        id: id, name: name, durationMS: 210000,
+        artists: [{ id: 1, name: who }],
+        album: { id: 2, name: album, picUrl: '' }
+      };
+    };
+    var PL = function (id, name, who) {
+      return { id: id, name: name, cover: '', creator: { nickname: who },
+               playCount: 120000, trackCount: 30 };
+    };
+
+    M.service = {
+      isLoggedIn: function () { return Promise.resolve(true); },
+      account: function () {
+        return Promise.resolve({ ok: true, data: {
+          userId: 77, nickname: '示例用户', avatarUrl: '', vipType: 0
+        }});
+      },
+      myPlaylists: function () {
+        return Promise.resolve({ ok: true, data: [
+          PL(1, '深夜咖啡', '示例用户'),
+          PL(2, '通勤四号线', '示例用户'),
+          PL(3, '写代码时听的', '示例用户'),
+          PL(4, '2026 夏', '示例用户')
+        ]});
+      },
+      likedSongs: function () {
+        return Promise.resolve({ ok: true, data: [
+          TRACK(11, '示例曲目一', '甲乐队', '示例专辑'),
+          TRACK(12, '示例曲目二', '乙乐队', '示例专辑二')
+        ]});
+      },
+      cloudSongs: function () {
+        return Promise.resolve({ ok: true, data: [
+          TRACK(21, '云盘曲目一', '丙乐队', '云盘专辑')
+        ]});
+      },
+      playRecords: function () {
+        return Promise.resolve({ ok: true, data: [
+          { track: TRACK(11, '示例曲目一', '甲乐队', '示例专辑'), playCount: 12, score: 0 }
+        ]});
+      },
+      logout: function () { return Promise.resolve({ ok: true, data: true }); }
+    };
+
+    M.actions.refreshAccount();
+    M.goTab('library');
+  });
+</script>
+</body>
+</html>

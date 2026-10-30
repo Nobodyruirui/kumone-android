@@ -1,7 +1,7 @@
 'use strict';
 // Live integration test: call real (anonymous) NetEase endpoints through the browser
 // kernel to prove encryption + request building + decoding all work end to end.
-const api = require('F:/test/kumone-android/www/kumone/lib/api.js');
+const api = require('../www/kumone/lib/api.js');
 
 const show = (name, prom) =>
   prom

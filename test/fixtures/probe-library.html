@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<title>Kumone 资料库自检</title>
+<style>
+  body { font: 13px/1.6 system-ui, sans-serif; margin: 20px; }
+  iframe { width: 390px; height: 760px; border: 1px solid #ddd; }
+  pre { background: #0a0a0a; color: #e8e8ea; padding: 12px; border-radius: 10px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<!--
+  自检探针：资料库（ticket 10）。
+
+  探针把 Mobile.service 换成假服务，逐个场景断言：
+    1. 未登录点「资料库」→ 直接进扫码页，不是五个点不动的入口
+    2. 已登录点「资料库」→ 五个入口都在，各自带 ref，摘要异步补上
+    3. 点「播放列表」→ 进我的歌单列表
+    4. 点「喜欢的音乐」→ 进曲目列表
+    5. 顶栏账号区 → 显示昵称；点它弹确认框；确认后调 logout 并回主页
+-->
+<iframe id="app" src="/www/index.html"></iframe>
+<pre id="result" data-result="PENDING">PENDING</pre>
+
+<script>
+var out = document.getElementById('result');
+var failures = [];
+function ok(name, cond, extra) {
+  if (!cond) failures.push(name + (extra ? ' :: ' + extra : ''));
+}
+function finish() {
+  var okAll = failures.length === 0;
+  out.setAttribute('data-result', okAll ? 'PASS' : 'FAIL');
+  out.textContent = (okAll ? 'PASS ' : 'FAIL ') +
+    (okAll ? '资料库自检通过' : ('失败项：' + failures.join('；')));
+}
+function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+var TRACK = {
+  id: 11, name: '红心曲目', durationMS: 200000,
+  artists: [{ id: 1, name: '甲' }], album: { id: 2, name: '专辑', picUrl: '' }
+};
+var PLAYLIST = { id: 22, name: '我的歌单一', cover: '', creator: { nickname: '我' }, playCount: 10, trackCount: 3 };
+var ACCOUNT = { userId: 77, nickname: '测试昵称', avatarUrl: '', vipType: 0 };
+
+function fakeService(overrides) {
+  var calls = [];
+  var loggedOut = false;
+  var base = {
+    calls: calls,
+    isLoggedIn: function () { return Promise.resolve(!loggedOut); },
+    account: function () {
+      // 退出之后内核就不认这个账号了 —— 假服务要跟真行为一致
+      if (loggedOut) return Promise.resolve({ ok: false, code: 'KUMONE_NEED_LOGIN' });
+      return Promise.resolve({ ok: true, data: ACCOUNT });
+    },
+    myPlaylists: function () { return Promise.resolve({ ok: true, data: [PLAYLIST] }); },
+    likedSongs: function () { return Promise.resolve({ ok: true, data: [TRACK] }); },
+    cloudSongs: function () { return Promise.resolve({ ok: true, data: [TRACK, TRACK] }); },
+    playRecords: function () {
+      return Promise.resolve({ ok: true, data: [{ track: TRACK, playCount: 12, score: 0 }] });
+    },
+    logout: function () {
+      calls.push({ channel: 'logout' });
+      loggedOut = true;
+      return Promise.resolve({ ok: true, data: true });
+    },
+    qrKey: function () { return Promise.resolve({ ok: true, data: 'uk' }); },
+    qrImage: function () { return Promise.resolve({ ok: true, data: 'data:image/png;base64,AA==' }); },
+    qrCheck: function () { return Promise.resolve({ ok: true, data: { code: 801, message: '等待扫码' } }); }
+  };
+  Object.keys(overrides || {}).forEach(function (k) { base[k] = overrides[k]; });
+  return base;
+}
+
+function findRef(tree, role, name) {
+  var re = new RegExp(role + ' "' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '" \\[ref=(@\\d+)');
+  var m = tree.match(re);
+  return m ? m[1] : null;
+}
+
+var frame = document.getElementById('app');
+frame.addEventListener('load', function () { setTimeout(run, 800); });
+
+async function run() {
+  try {
+    var W = frame.contentWindow;
+    var M = W.Mobile;
+    var doc = W.document;
+
+    /* ------------------------------- 1. 未登录点资料库 → 直接拉起扫码 */
+
+    M.service = fakeService({
+      isLoggedIn: function () { return Promise.resolve(false); },
+      account: function () { return Promise.resolve({ ok: false, code: 'KUMONE_NEED_LOGIN' }); }
+    });
+    M.goTab('library');
+    await wait(400);
+
+    ok('未登录点资料库直接进扫码页', M.state.view.type === 'login', M.state.view.type);
+    ok('扫码页有二维码区域或状态文字',
+      doc.querySelectorAll('#m-view .m-login-status, #m-view .m-login-code').length > 0);
+    ok('没有渲染出点不动的入口列表',
+      doc.querySelectorAll('#m-view .m-list-row').length === 0,
+      '入口行数 ' + doc.querySelectorAll('#m-view .m-list-row').length);
+
+    /* ------------------------------- 2. 已登录：五个入口 */
+
+    M.service = fakeService();
+    // 探针把假服务换上之后，顶栏账号区要重新读一次账号
+    M.actions.refreshAccount();
+    M.goTab('library');
+    await wait(500);
+
+    ok('已登录进资料库', M.state.view.type === 'library', M.state.view.type);
+
+    var NAMES = ['播放列表', '喜欢的音乐', '云盘', '最近播放', '听歌排行'];
+    var snap = M.snapshot();
+    NAMES.forEach(function (n) {
+      ok('入口「' + n + '」带 ref', !!findRef(snap.tree, 'button', n));
+    });
+    ok('五个入口都在', doc.querySelectorAll('#m-view .m-list-row').length === 5,
+      '实际 ' + doc.querySelectorAll('#m-view .m-list-row').length);
+    ok('角色色点按角色分配', doc.querySelectorAll('#m-view .m-list-dot').length === 5);
+
+    // 摘要异步补上
+    var subs = Array.prototype.map.call(doc.querySelectorAll('#m-view .m-list-row .m-track-sub'),
+      function (n) { return n.textContent; });
+    ok('入口摘要不是「加载中…」', subs.every(function (s) { return s && s !== '加载中…'; }),
+      JSON.stringify(subs));
+    ok('摘要里带上了数量', subs.join(' ').indexOf('个歌单') >= 0, JSON.stringify(subs));
+
+    /* ------------------------------- 3. 点播放列表 → 我的歌单 */
+
+    var ref = findRef(M.snapshot().tree, 'button', '播放列表');
+    var r = M.act(ref, 'click');
+    ok('点播放列表有回执', r.ok === true, JSON.stringify(r));
+    await wait(400);
+    ok('进入我的歌单视图', M.state.view.type === 'myplaylists', M.state.view.type);
+    ok('我的歌单列出了歌单',
+      doc.querySelectorAll('#m-view .m-tile').length > 0,
+      '卡片数 ' + doc.querySelectorAll('#m-view .m-tile').length);
+
+    /* ------------------------------- 4. 点喜欢的音乐 → 曲目列表 */
+
+    M.goTab('library');
+    await wait(300);
+    var ref2 = findRef(M.snapshot().tree, 'button', '喜欢的音乐');
+    M.act(ref2, 'click');
+    await wait(400);
+    ok('进入喜欢的音乐视图', M.state.view.type === 'liked', M.state.view.type);
+    ok('喜欢列表里有可点的曲目行',
+      doc.querySelectorAll('#m-view .m-track-btn').length > 0,
+      '曲目行数 ' + doc.querySelectorAll('#m-view .m-track-btn').length);
+
+    // 点一首 → 进队列 + 迷你播放条出现该曲目
+    var trackBtn = doc.querySelector('#m-view .m-track-btn');
+    if (trackBtn) {
+      trackBtn.click();
+      await wait(400);
+      ok('点歌后队列里有这首', M.player.queueItems().length === 1,
+        '队列长度 ' + M.player.queueItems().length);
+      var miniTitle = doc.getElementById('m-mini-title');
+      ok('迷你播放条显示了曲目', miniTitle && miniTitle.textContent === '红心曲目',
+        miniTitle ? miniTitle.textContent : '（无）');
+    }
+
+    /* ------------------------------- 4b. 云盘 / 最近播放 / 听歌排行 */
+
+    M.goTab('library');
+    await wait(300);
+    var refCloud = findRef(M.snapshot().tree, 'button', '云盘');
+    M.act(refCloud, 'click');
+    await wait(400);
+    ok('进入云盘视图', M.state.view.type === 'cloud', M.state.view.type);
+    ok('云盘列出了曲目', doc.querySelectorAll('#m-view .m-track-btn').length > 0);
+
+    M.goTab('library');
+    await wait(300);
+    var refRecent = findRef(M.snapshot().tree, 'button', '最近播放');
+    M.act(refRecent, 'click');
+    await wait(400);
+    ok('进入最近播放视图', M.state.view.type === 'recent', M.state.view.type);
+
+    M.goTab('library');
+    await wait(300);
+    var refRecords = findRef(M.snapshot().tree, 'button', '听歌排行');
+    M.act(refRecords, 'click');
+    await wait(400);
+    ok('进入听歌排行视图', M.state.view.type === 'records', M.state.view.type);
+    ok('听歌排行带播放次数',
+      /听了 12 次/.test(doc.getElementById('m-view').textContent),
+      doc.getElementById('m-view').textContent.slice(0, 120));
+
+    /* ------------------------------- 5. 账号区 + 退出登录 */
+
+    await wait(300);
+    var accBtn = doc.getElementById('m-account');
+    ok('顶栏有账号入口', !!accBtn);
+    ok('账号入口显示昵称', accBtn && accBtn.textContent.indexOf('测试昵称') >= 0,
+      accBtn ? accBtn.textContent : '（无）');
+
+    if (accBtn) {
+      accBtn.click();
+      await wait(150);
+      ok('点了账号弹出确认框', doc.querySelectorAll('.m-modal').length === 1);
+      var okBtn = doc.querySelector('.m-modal .m-btn-primary');
+      ok('确认框有确定按钮', !!okBtn);
+      if (okBtn) {
+        okBtn.click();
+        await wait(400);
+        ok('退出后回到主页', M.state.view.type === 'home', M.state.view.type);
+        var loggedOut = M.service.calls.some(function (c) { return c.channel === 'logout'; });
+        ok('退出登录调了内核的 logout', loggedOut);
+        ok('退出后顶栏账号区清空', !doc.getElementById('m-account'));
+      }
+    }
+
+    finish();
+  } catch (e) {
+    failures.push('异常：' + (e && e.message ? e.message : String(e)));
+    finish();
+  }
+}
+</script>
+</body>
+</html>

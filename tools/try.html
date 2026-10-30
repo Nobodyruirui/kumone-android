@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kumone 试用台 · ego 风格</title>
+<style>
+  :root {
+    --canvas: #f4f4f6;
+    --surface: #ffffff;
+    --line: #e3e3e7;
+    --line-strong: #0a0a0a;
+    --ink: #0a0a0a;
+    --ink-2: rgba(10,10,10,.56);
+    --ink-3: rgba(10,10,10,.34);
+    --role-curated: #f2c489;
+    --role-auto: #a9cbe8;
+    --radius-card: 16px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 28px;
+    background: var(--canvas);
+    font: 14px/1.6 "Inter", system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    color: var(--ink);
+  }
+  header { max-width: 1180px; margin: 0 auto 22px; }
+  h1 { font-size: 30px; font-weight: 800; margin: 0 0 4px; letter-spacing: -.01em; }
+  .sub { font-style: italic; font-weight: 300; color: var(--ink-2); font-size: 14px; }
+  .wrap { max-width: 1180px; margin: 0 auto; display: flex; gap: 26px; align-items: flex-start; flex-wrap: wrap; }
+  .phone {
+    width: 390px; height: 844px; flex: 0 0 390px;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 26px;
+    overflow: hidden; box-shadow: 0 18px 44px rgba(10,10,10,.10);
+  }
+  .phone iframe { width: 390px; height: 844px; border: 0; display: block; }
+  .panel { flex: 1 1 520px; min-width: 460px; }
+  .card {
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-card);
+    padding: 16px 18px; margin-bottom: 14px;
+  }
+  .card h2 { font-size: 17px; font-weight: 700; margin: 0 0 3px; }
+  .card .note { font-style: italic; font-weight: 300; color: var(--ink-3); font-size: 13px; margin-bottom: 12px; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; }
+  button {
+    font: inherit; font-weight: 600; cursor: pointer;
+    padding: 9px 14px; border-radius: 10px;
+    border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink);
+  }
+  button:hover { background: #fafafc; }
+  button.primary { background: var(--ink); color: #fff; }
+  button.role { background: var(--role-curated); }
+  button.role2 { background: var(--role-auto); }
+  pre {
+    background: #0a0a0a; color: #e8e8ea; padding: 14px; border-radius: 12px;
+    white-space: pre-wrap; font: 12px/1.65 ui-monospace, "SF Mono", Consolas, monospace;
+    max-height: 340px; overflow: auto; margin: 12px 0 0;
+  }
+  .tip { color: var(--ink-2); font-size: 13px; margin: 10px 0 0; }
+  code { background: #f0f0f3; padding: 1px 5px; border-radius: 5px; font-size: 12px; }
+
+  /* 窄窗口（ego-lite 默认窗口、侧栏浏览器等）下改为纵向堆叠，
+     否则面板会被压到视口外，按钮点不到 */
+  @media (max-width: 1040px) {
+    body { padding: 18px; }
+    .wrap { flex-direction: column; gap: 18px; }
+    .panel { min-width: 0; width: 100%; }
+    .phone { flex: 0 0 auto; width: 100%; max-width: 390px; }
+    .phone iframe { width: 100%; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Kumone 试用台</h1>
+  <div class="sub">same DOM, two projections — 人读像素，模型读语义</div>
+</header>
+
+<div class="wrap">
+  <!-- 左：真实 App（390×844 手机视口） -->
+  <div class="phone"><iframe id="app" src="/www/index.html"></iframe></div>
+
+  <!-- 右：模型接口 + 真实数据接口 -->
+  <div class="panel">
+    <div class="card">
+      <h2>模型可读界面</h2>
+      <div class="note">同一份 DOM 的另一种投影</div>
+      <div class="row">
+        <button class="primary" data-cmd="snapshot">读语义树 snapshot()</button>
+        <button data-cmd="act">点「资料库」act(ref)</button>
+        <button data-cmd="stale">用过期 ref 操作</button>
+        <button data-cmd="unknown">用未知动作</button>
+      </div>
+      <pre id="out-model">点上面任意按钮。</pre>
+    </div>
+
+    <div class="card">
+      <h2>知识包工具</h2>
+      <div class="note">role + name 定位，不用记 ref</div>
+      <div class="row">
+        <button class="role" data-cmd="listPlaylists">listPlaylists()</button>
+        <button class="role2" data-cmd="currentPlayback">currentPlayback()</button>
+        <button data-cmd="togglePlayback">togglePlayback()</button>
+      </div>
+      <pre id="out-pack">点上面任意按钮。</pre>
+    </div>
+
+    <div class="card">
+      <h2>真实网易云数据</h2>
+      <div class="note">服务层 → 内核 → 官方接口</div>
+      <div class="row">
+        <button class="primary" data-cmd="daily">每日推荐</button>
+        <button data-cmd="toplists">排行榜</button>
+        <button data-cmd="account">账号状态</button>
+      </div>
+      <pre id="out-data">点上面任意按钮。</pre>
+      <p class="tip" id="tip-proxy">正在检查本地 CORS 中继…</p>
+      <p class="tip">未登录时只有匿名接口可用；「我的歌单 / 喜欢的音乐 / 云盘」要先扫码登录 —— 主页点「去登录」会拉起扫码页（内核三件套已接好）。</p>
+    </div>
+  </div>
+</div>
+
+<script>
+var out = {
+  model: document.getElementById('out-model'),
+  pack: document.getElementById('out-pack'),
+  data: document.getElementById('out-data')
+};
+var frame = document.getElementById('app');
+
+function M() { return frame.contentWindow.Mobile; }
+function NS() { return frame.contentWindow.KumoneLearnings.netease; }
+
+/**
+ * 把对网易云的 fetch 改道到本地 CORS 中继。
+ * 桌面浏览器直接请求 music.163.com 会被 CORS 拦；中继转发并补 CORS 头，
+ * 顺带把 Referer / User-Agent 设成网易云要的那一套。
+ * 内核层零改动 —— 只是换了个 fetch 出口。中继没起来时自动退回直连。
+ */
+function installProxy(w) {
+  if (!w || !w.fetch) return false;
+  var orig = w.fetch.bind(w);
+  var RELAY = 'http://127.0.0.1:8111/proxy?url=';
+  w.fetch = function (input, init) {
+    var url = typeof input === 'string' ? input : (input && input.url) || '';
+    if (/^https:\/\/(music|interface)\.163\.com/.test(url)) {
+      return orig(RELAY + encodeURIComponent(url), init);
+    }
+    return orig(input, init);
+  };
+  return true;
+}
+
+var proxied = false;
+
+function show(slot, title, value) {
+  var box = out[slot];
+  var body = (typeof value === 'string') ? value : JSON.stringify(value, null, 2);
+  var block = '▸ ' + title + (body ? '\n' + body : '');
+  // 追加而不是覆盖：连点多个按钮时结果都在，别互相顶掉
+  if (box.getAttribute('data-logged') !== '1') {
+    box.textContent = block;
+    box.setAttribute('data-logged', '1');
+  } else {
+    box.textContent = box.textContent + '\n\n' + block;
+  }
+  box.scrollTop = box.scrollHeight;
+}
+
+/** 从语义树里找一个按钮的 ref（role + name，不硬编码 ref） */
+function refOf(role, name) {
+  var tree = M().snapshot().tree;
+  var m = tree.match(new RegExp(role + ' "' + name + '" \\[ref=(@\\d+)'));
+  return m ? m[1] : null;
+}
+
+var COMMANDS = {
+  snapshot: function () {
+    var snap = M().snapshot();
+    show('model', 'snapshot() → ok=' + snap.ok + '（树节选）', snap.tree.split('\n').slice(0, 22).join('\n'));
+  },
+  act: function () {
+    var ref = refOf('button', '资料库');
+    if (!ref) return show('model', '找不到「资料库」按钮', '');
+    var receipt = M().act(ref, 'click');
+    show('model', 'act(' + ref + ', "click") → ' + JSON.stringify(receipt),
+      '界面已切到资料库。再点一次「读语义树」看看树变了。');
+  },
+  stale: function () {
+    var r = M().act('@999999', 'click');
+    show('model', 'act("@999999","click") → code=' + r.code + ' kind=' + r.kind, r.message);
+  },
+  unknown: function () {
+    var r = M().act('@1', 'swipe');
+    show('model', 'act("@1","swipe") → code=' + r.code, r.message);
+  },
+  listPlaylists: function () {
+    NS().listPlaylists().then(function (r) { show('pack', 'listPlaylists() → ok=' + r.ok + ' count=' + r.count, r.items); });
+  },
+  currentPlayback: function () {
+    NS().currentPlayback().then(function (r) { show('pack', 'currentPlayback() → source=' + r.source, r); });
+  },
+  togglePlayback: function () {
+    NS().togglePlayback().then(function (r) { show('pack', 'togglePlayback() → ' + r.action + ' 于「' + r.name + '」', r); });
+  },
+  daily: function () {
+    show('data', '请求中…（真实网络请求，约 1–3 秒）', '');
+    M().service.dailyRecommend().then(function (r) {
+      if (!r.ok) return show('data', '失败：' + r.code, r.message);
+      show('data', '每日推荐 ' + r.data.length + ' 首：', r.data.slice(0, 12).map(function (t) {
+        return '· ' + t.name + ' — ' + (t.artists || []).map(function (a) { return a.name; }).join(' / ');
+      }).join('\n'));
+    });
+  },
+  toplists: function () {
+    out.data.textContent = '请求中…';
+    M().service.toplists().then(function (r) {
+      if (!r.ok) return show('data', '失败：' + r.code, r.message);
+      show('data', '排行榜 ' + r.data.length + ' 个：', r.data.slice(0, 12).map(function (t) { return '· ' + t.name; }).join('\n'));
+    });
+  },
+  account: function () {
+    M().service.account().then(function (r) {
+      show('data', '账号状态：' + (r.ok ? (r.data ? r.data.nickname : '未登录') : r.code), r);
+    });
+  }
+};
+
+document.addEventListener('click', function (e) {
+  var btn = e.target.closest('button[data-cmd]');
+  if (!btn) return;
+  var fn = COMMANDS[btn.getAttribute('data-cmd')];
+  if (fn) { try { fn(); } catch (err) { show('model', '异常：' + err.message, ''); } }
+});
+
+// App 加载完成后装上 CORS 中继（让真实数据按钮在任意浏览器里可用）
+frame.addEventListener('load', function () {
+  setTimeout(function () {
+    proxied = installProxy(frame.contentWindow);
+    var tip = document.getElementById('tip-proxy');
+    if (proxied) {
+      // 中继是后装的，App 启动时那批请求已经被 CORS 拦掉了 ——
+      // 重新渲染一次，左边这个 App 才会用真实数据把主页填上。
+      try { M().render(); } catch (_) {}
+      tip.textContent = '已接上本地 CORS 中继（127.0.0.1:8111）：左边的 App 与右边的按钮都能拉真实数据。';
+    } else {
+      tip.textContent = '未接上 CORS 中继：真实数据按钮在桌面浏览器里会被 CORS 拦（安卓 App 走原生桥，不受影响）。';
+    }
+  }, 300);
+});
+</script>
+</body>
+</html>

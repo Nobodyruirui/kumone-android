@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head><meta charset="utf-8"><title>试用台按钮自检</title></head>
+<body>
+<iframe id="try" src="/tools/try.html" style="width:1280px;height:1000px;border:0"></iframe>
+<pre id="result" data-result="PENDING">PENDING</pre>
+<script>
+var out = document.getElementById('result');
+var f = document.getElementById('try');
+function done(ok, msg) {
+  out.setAttribute('data-result', ok ? 'PASS' : 'FAIL');
+  out.textContent = (ok ? 'PASS ' : 'FAIL ') + msg;
+}
+f.addEventListener('load', function () {
+  var w = f.contentWindow, d = f.contentDocument;
+  var report = [];
+  var order = ['snapshot', 'act', 'stale', 'unknown', 'listPlaylists', 'currentPlayback', 'daily'];
+  var i = 0;
+  function step() {
+    if (i >= order.length) {
+      var snapText = d.getElementById('out-model').textContent;
+      var packText = d.getElementById('out-pack').textContent;
+      var dataText = d.getElementById('out-data').textContent;
+      var ok = /snapshot\(\)/.test(snapText)
+        && /act\(@\d+/.test(snapText)
+        && /KUMONE_STALE_REF/.test(snapText)
+        && /KUMONE_UNSUPPORTED/.test(snapText)
+        && /currentPlayback/.test(packText)
+        && /每日推荐 \d+ 首/.test(dataText);
+      report.push('--- 模型 ---\n' + snapText.slice(0, 400));
+      report.push('--- 知识包 ---\n' + packText.slice(0, 300));
+      report.push('--- 真实数据 ---\n' + dataText.slice(0, 400));
+      return done(ok, report.join('\n'));
+    }
+    var cmd = order[i++];
+    var btn = d.querySelector('button[data-cmd="' + cmd + '"]');
+    if (!btn) { report.push('缺按钮 ' + cmd); return step(); }
+    btn.click();
+    setTimeout(step, cmd === 'daily' ? 6000 : 900);
+  }
+  setTimeout(step, 1500);
+});
+</script>
+</body>
+</html>

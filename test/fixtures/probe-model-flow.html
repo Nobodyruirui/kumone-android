@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<title>Kumone 模型序列自检</title>
+<style>
+  body { font: 13px/1.6 system-ui, sans-serif; margin: 20px; }
+  iframe { width: 390px; height: 700px; border: 1px solid #ddd; }
+  pre { background: #0a0a0a; color: #e8e8ea; padding: 12px; border-radius: 10px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<!--
+  模型序列自检（ticket 11 的模型侧验收项）：
+  只用模型能用的两把工具 —— Mobile.snapshot() 与 Mobile.act(ref, action) ——
+  走完一条真实流程：
+
+    快照 → 找到「资料库」→ 点它 → 快照 → 找到「喜欢的音乐」→ 点它
+        → 快照 → 找到曲目 → 点它 → 确认真的开始播放（队列里有歌、迷你条更新）
+
+  不允许用任何内部 API 抄近道（比如直接调 M.nav）。也不允许硬编码 ref ——
+  每次都从快照里按 role+name 现找。
+-->
+<iframe id="app" src="/www/index.html"></iframe>
+<pre id="result" data-result="PENDING">PENDING</pre>
+
+<script>
+var out = document.getElementById('result');
+var failures = [];
+function ok(name, cond, extra) {
+  if (!cond) failures.push(name + (extra ? ' :: ' + extra : ''));
+}
+function finish() {
+  var okAll = failures.length === 0;
+  out.setAttribute('data-result', okAll ? 'PASS' : 'FAIL');
+  out.textContent = (okAll ? 'PASS ' : 'FAIL ') +
+    (okAll ? '模型序列跑通：进资料库 → 点喜欢的音乐 → 播放' : ('失败项：' + failures.join('；')));
+}
+function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+var TRACK = {
+  id: 11, name: '模型序列曲目', durationMS: 200000,
+  artists: [{ id: 1, name: '甲' }], album: { id: 2, name: '专辑', picUrl: '' }
+};
+
+/** 按 role+name 从快照里现找 ref —— 模型唯一的定位手段。 */
+function findRef(tree, role, name) {
+  var re = new RegExp(role + ' "' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '" \\[ref=(@\\d+)');
+  var m = tree.match(re);
+  return m ? m[1] : null;
+}
+
+function fakeService() {
+  return {
+    isLoggedIn: function () { return Promise.resolve(true); },
+    account: function () {
+      return Promise.resolve({ ok: true, data: { userId: 77, nickname: '模型', avatarUrl: '', vipType: 0 } });
+    },
+    myPlaylists: function () { return Promise.resolve({ ok: true, data: [] }); },
+    likedSongs: function () { return Promise.resolve({ ok: true, data: [TRACK] }); },
+    cloudSongs: function () { return Promise.resolve({ ok: true, data: [] }); },
+    playRecords: function () { return Promise.resolve({ ok: true, data: [] }); },
+    songUrl: function (id) {
+      return Promise.resolve({ ok: true, data: { url: 'https://example.test/' + id + '.mp3', level: 'standard' } });
+    },
+    unblock: function () { return Promise.resolve({ ok: false, code: 'KUMONE_UNBLOCK_FAILED' }); },
+    logout: function () { return Promise.resolve({ ok: true, data: true }); },
+    dailyRecommend: function () { return Promise.resolve({ ok: true, data: [TRACK] }); },
+    recommendedPlaylists: function () { return Promise.resolve({ ok: true, data: [] }); },
+    toplists: function () { return Promise.resolve({ ok: true, data: [] }); },
+    topArtists: function () { return Promise.resolve({ ok: true, data: [] }); },
+    newAlbums: function () { return Promise.resolve({ ok: true, data: [] }); }
+  };
+}
+
+var frame = document.getElementById('app');
+frame.addEventListener('load', function () { setTimeout(run, 800); });
+
+async function run() {
+  try {
+    var W = frame.contentWindow;
+    var M = W.Mobile;
+    var doc = W.document;
+
+    M.service = fakeService();
+    M.actions.refreshAccount();
+    await wait(200);
+
+    /* --- 1. 快照 --- */
+    var snap = M.snapshot();
+    ok('snapshot 返回 ok', snap.ok === true);
+    ok('快照带视图标记', /view "/.test(snap.tree));
+
+    /* --- 2. 进资料库 --- */
+    var libRef = findRef(snap.tree, 'button', '资料库');
+    ok('快照里找得到「资料库」', !!libRef);
+    if (!libRef) { finish(); return; }
+
+    var r1 = M.act(libRef, 'click');
+    ok('act 点资料库有回执', r1.ok === true, JSON.stringify(r1));
+    await wait(500);
+
+    var snap2 = M.snapshot();
+    ok('进到资料库了', /view "library"/.test(snap2.tree));
+
+    /* --- 3. 点喜欢的音乐 --- */
+    var likedRef = findRef(snap2.tree, 'button', '喜欢的音乐');
+    ok('快照里找得到「喜欢的音乐」', !!likedRef);
+    if (!likedRef) { finish(); return; }
+
+    var r2 = M.act(likedRef, 'click');
+    ok('act 点喜欢的音乐有回执', r2.ok === true, JSON.stringify(r2));
+    await wait(500);
+
+    var snap3 = M.snapshot();
+    ok('进到喜欢的音乐列表', /view "liked"/.test(snap3.tree));
+
+    /* --- 4. 点歌播放 --- */
+    var playRef = findRef(snap3.tree, 'button', '播放 模型序列曲目 · 甲');
+    ok('快照里找得到那首歌的播放按钮', !!playRef);
+    if (!playRef) { finish(); return; }
+
+    var r3 = M.act(playRef, 'click');
+    ok('act 点歌有回执', r3.ok === true, JSON.stringify(r3));
+    await wait(500);
+
+    ok('队列里真的有歌了', M.player.queueItems().length === 1,
+      '队列长度 ' + M.player.queueItems().length);
+    ok('迷你播放条更新成那首歌',
+      doc.getElementById('m-mini-title').textContent === '模型序列曲目',
+      doc.getElementById('m-mini-title').textContent);
+
+    finish();
+  } catch (e) {
+    failures.push('异常：' + (e && e.message ? e.message : String(e)));
+    finish();
+  }
+}
+</script>
+</body>
+</html>

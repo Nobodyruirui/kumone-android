@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<title>Kumone snapshot 只读自检</title>
+</head>
+<body>
+<!--
+  自检探针：验证 Mobile.snapshot() 是只读的（ego 界面设计理论第 3 条）。
+  判据：
+    1. 调用 snapshot() 前后，DOM 结构必须完全一致
+    2. 调用 snapshot() 前后，Mobile.state 必须完全一致
+    3. 重复调用不得让 ref 数量增长（ref 应稳定复用）
+  结果写到 #result 的 data-result 属性与文本里，供 headless 读取。
+-->
+<div id="app">
+  <header role="banner">
+    <div role="heading" aria-level="1" aria-label="探针标题">探针标题</div>
+  </header>
+  <main role="main" aria-label="内容">
+    <section role="region" aria-label="区块">
+      <h2>区块</h2>
+      <button type="button" aria-label="按钮一">按钮一</button>
+    </section>
+  </main>
+  <nav aria-label="主导航">
+    <button type="button" aria-label="主页">主页</button>
+    <button type="button" aria-label="资料库">资料库</button>
+  </nav>
+</div>
+<div id="result" data-result="PENDING">PENDING</div>
+
+<script src="../../www/mobile/core/errors.js"></script>
+<script src="../../www/mobile/core/snapshot.js"></script>
+<script>
+(function () {
+  var out = document.getElementById('result');
+  function finish(ok, message) {
+    out.setAttribute('data-result', ok ? 'PASS' : 'FAIL');
+    out.textContent = ok ? 'PASS ' + message : 'FAIL ' + message;
+  }
+  try {
+    var domBefore = document.getElementById('app').innerHTML;
+    var stateBefore = JSON.stringify((window.Mobile && window.Mobile.state) || null);
+
+    var s1 = window.Mobile.snapshot();
+    var s2 = window.Mobile.snapshot();
+    var s3 = window.Mobile.snapshot();
+
+    var domAfter = document.getElementById('app').innerHTML;
+    var stateAfter = JSON.stringify((window.Mobile && window.Mobile.state) || null);
+
+    if (domBefore !== domAfter) return finish(false, 'snapshot 改变了 DOM');
+    if (stateBefore !== stateAfter) return finish(false, 'snapshot 改变了状态');
+    if (!s1.ok || !s2.ok || !s3.ok) return finish(false, 'snapshot 未返回 ok');
+
+    // ref 必须稳定：重复快照里同一个 button 拿到同一个 ref
+    function refOf(tree, name) {
+      var m = tree.match(new RegExp('button "' + name + '" \\[ref=(@\\d+)'));
+      return m ? m[1] : null;
+    }
+    var a = refOf(s1.tree, '主页');
+    var b = refOf(s3.tree, '主页');
+    if (!a || a !== b) return finish(false, 'ref 未稳定复用：' + a + ' vs ' + b);
+
+    finish(true, 'DOM 未变、状态未变、ref 稳定');
+  } catch (e) {
+    finish(false, '异常：' + (e && e.message ? e.message : String(e)));
+  }
+})();
+</script>
+</body>
+</html>

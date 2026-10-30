@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<title>Kumone 全屏播放页自检</title>
+<style>
+  body { font: 13px/1.6 system-ui, sans-serif; margin: 20px; }
+  iframe { width: 390px; height: 760px; border: 1px solid #ddd; }
+  pre { background: #0a0a0a; color: #e8e8ea; padding: 12px; border-radius: 10px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<!--
+  自检探针：全屏播放页（ticket 09）。
+
+  播放引擎在这里换成**假播放器**（真播放器要真音频与真地址），
+  但假播放器必须跟真行为一致：状态字段齐全、动作会改状态并广播。
+  假播放器的音质模型刻意做了「降级」：选极高 → 实际放标准，
+  这样「降级要看得见」那条才能测到。
+
+  断言：
+    1. 点迷你条进全屏，底部导航与迷你条同时消失
+    2. 大封面 / 歌名 / 艺人 / 专辑 四项都在
+    3. 拖进度条 → seek 生效
+    4. 上一首 / 播放暂停 / 下一首 → 状态变化且界面跟着刷新
+    5. 音量可调、画质可切且降级看得见
+    6. 队列能打开能看到内容，收起能回到来源页
+    7. 没有曲目时是空状态而不是空白页
+    8. 快照里能读到 播放/暂停/上一首/下一首/队列/收起 的 ref
+-->
+<iframe id="app" src="/www/index.html"></iframe>
+<pre id="result" data-result="PENDING">PENDING</pre>
+
+<script>
+var out = document.getElementById('result');
+var failures = [];
+function ok(name, cond, extra) {
+  if (!cond) failures.push(name + (extra ? ' :: ' + extra : ''));
+}
+function finish() {
+  var okAll = failures.length === 0;
+  out.setAttribute('data-result', okAll ? 'PASS' : 'FAIL');
+  out.textContent = (okAll ? 'PASS ' : 'FAIL ') +
+    (okAll ? '全屏播放页自检通过' : ('失败项：' + failures.join('；'))) +
+    (caught.length ? (' | 运行时错误：' + caught.slice(0, 4).join(' | ')) : '');
+}
+function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+var TRACK = {
+  id: 11, name: '播放页曲目', durationMS: 220000,
+  artists: [{ id: 1, name: '甲乐队' }],
+  album: { id: 2, name: '播放页专辑', picUrl: '' }
+};
+
+/** 假播放器：接口与真引擎一致，动作会改状态并广播。 */
+function fakePlayer(track) {
+  var subs = [];
+  var state = {
+    playing: false,
+    track: track || null,
+    trackName: track ? track.name : null,
+    artist: track ? track.artists.map(function (a) { return a.name; }).join(' / ') : null,
+    album: track ? track.album.name : null,
+    cover: track ? track.album.picUrl : null,
+    position: 0,
+    duration: track ? track.durationMS / 1000 : 0,
+    quality: 'standard',
+    requestedQuality: 'standard',
+    volume: 0.9,
+    repeat: 'off',
+    queueLength: track ? 1 : 0,
+    index: track ? 0 : -1,
+    playNextLength: 0,
+    error: null
+  };
+  function emit() { subs.slice().forEach(function (fn) { fn(state); }); }
+  return {
+    state: function () { return state; },
+    subscribe: function (fn) { subs.push(fn); return function () {
+      var i = subs.indexOf(fn); if (i >= 0) subs.splice(i, 1);
+    }; },
+    toggle: function () { state.playing = !state.playing; emit(); return state; },
+    next: function () { state.index = state.index + 1; state.position = 0; emit(); return state; },
+    prev: function () { state.index = Math.max(0, state.index - 1); state.position = 0; emit(); return state; },
+    seek: function (t) { state.position = Number(t) || 0; emit(); return state; },
+    setVolume: function (v) { state.volume = v; emit(); return state; },
+    setQuality: function (q) {
+      state.requestedQuality = q;
+      // 刻意模拟降级：只有标准放得动
+      state.quality = (q === 'standard') ? 'standard' : 'standard';
+      emit();
+      return state;
+    },
+    playQueue: function (tracks, i) {
+      state.queueLength = (tracks || []).length;
+      state.index = i || 0;
+      state.track = (tracks || [])[i] || null;
+      state.playing = true;
+      emit();
+      return state;
+    },
+    queueItems: function () { return state.track ? [state.track] : []; },
+    history: function () { return []; },
+    persist: function () {}, restore: function () {}
+  };
+}
+
+function findRef(tree, role, name) {
+  var re = new RegExp(role + ' "' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '" \\[ref=(@\\d+)');
+  var m = tree.match(re);
+  return m ? m[1] : null;
+}
+
+var frame = document.getElementById('app');
+frame.addEventListener('load', function () { setTimeout(run, 800); });
+
+var caught = [];
+window.addEventListener('error', function (e) {
+  caught.push('window error: ' + (e.message || '') + ' @' + (e.filename || '') + ':' + (e.lineno || ''));
+});
+window.addEventListener('unhandledrejection', function (e) {
+  caught.push('unhandled rejection: ' + ((e.reason && e.reason.message) || e.reason));
+});
+
+async function run() {
+  try {
+    var W = frame.contentWindow;
+    var M = W.Mobile;
+    var doc = W.document;
+    W.addEventListener('error', function (e) {
+      caught.push('iframe error: ' + (e.message || '') + ' @' + (e.filename || '') + ':' + (e.lineno || ''));
+    });
+    W.addEventListener('unhandledrejection', function (e) {
+      caught.push('iframe rejection: ' + ((e.reason && e.reason.message) || e.reason));
+    });
+
+    /* ------------------------------- 0. 空状态（先来这个，因为好还原） */
+
+    M.player = fakePlayer(null);
+    M.nav({ type: 'nowplaying' });
+    await wait(300);
+
+    ok('没有曲目时是空状态', doc.querySelectorAll('#m-view .m-np-empty').length === 1);
+    ok('空状态不是空白页', doc.getElementById('m-view').textContent.indexOf('还没有在放什么') >= 0);
+    ok('全屏时底部导航消失', doc.body.classList.contains('m-np'));
+    ok('全屏时迷你条真的不可见',
+      W.getComputedStyle(doc.getElementById('m-mini')).display === 'none');
+    ok('全屏时底部导航真的不可见',
+      W.getComputedStyle(doc.getElementById('m-nav')).display === 'none');
+
+    /* ------------------------------- 1. 从迷你条进入（带曲目） */
+
+    M.player = fakePlayer(TRACK);
+    M.goTab('home');
+    await wait(200);
+    var openBtn = doc.getElementById('m-mini-open');
+    ok('迷你条有「打开播放页」按钮', !!openBtn);
+    openBtn.click();
+    await wait(300);
+
+    ok('进入全屏播放页', M.state.view.type === 'nowplaying', M.state.view.type);
+    ok('全屏时底部导航与迷你条都消失', doc.body.classList.contains('m-np'));
+
+    /* ------------------------------- 2. 四项信息 */
+
+    ok('有大封面', doc.querySelectorAll('#m-view .m-np-cover').length === 1);
+    var t = doc.querySelector('#m-view .m-np-title');
+    var a = doc.querySelector('#m-view .m-np-artist');
+    var al = doc.querySelector('#m-view .m-np-album');
+    ok('有歌名', t && t.textContent === '播放页曲目', t ? t.textContent : '');
+    ok('有艺人', a && a.textContent === '甲乐队', a ? a.textContent : '');
+    ok('有专辑名', al && al.textContent === '播放页专辑', al ? al.textContent : '');
+
+    /* ------------------------------- 3. 快照里的语义名与 ref */
+
+    var snap = M.snapshot();
+    ['收起', '上一首', '下一首', '队列', '播放'].forEach(function (n) {
+      ok('快照里有「' + n + '」的 ref', !!findRef(snap.tree, 'button', n));
+    });
+    ok('快照里有进度滑杆的 ref', !!findRef(snap.tree, 'slider', '进度'));
+    ok('快照里有音量滑杆的 ref', !!findRef(snap.tree, 'slider', '音量'));
+
+    /* ------------------------------- 4. 拖进度条 → seek */
+
+    var prog = doc.querySelector('#m-view .m-np-range');
+    prog.value = '90';
+    prog.dispatchEvent(new W.Event('input', { bubbles: true }));
+    await wait(120);
+    ok('拖进度条后播放位置跳过去', Math.abs(M.player.state().position - 90) < 0.5,
+      'position=' + M.player.state().position);
+    ok('时间显示跟着更新',
+      doc.querySelector('#m-view .m-np-time-now').textContent === '1:30',
+      doc.querySelector('#m-view .m-np-time-now').textContent);
+    ok('总时长显示正确',
+      doc.querySelector('#m-view .m-np-time-total').textContent === '3:40',
+      doc.querySelector('#m-view .m-np-time-total').textContent);
+
+    /* ------------------------------- 5. 播放 / 暂停 / 上一首 / 下一首 */
+
+    var playRef = findRef(M.snapshot().tree, 'button', '播放');
+    M.act(playRef, 'click');
+    await wait(120);
+    ok('点播放后状态是播放中', M.player.state().playing === true);
+    ok('界面跟着刷新成「暂停」', !!findRef(M.snapshot().tree, 'button', '暂停'));
+
+    var pauseRef = findRef(M.snapshot().tree, 'button', '暂停');
+    M.act(pauseRef, 'click');
+    await wait(120);
+    ok('再点一下变回暂停状态', M.player.state().playing === false);
+
+    M.act(findRef(M.snapshot().tree, 'button', '下一首'), 'click');
+    await wait(120);
+    ok('点下一首 index 变了', M.player.state().index === 1, 'index=' + M.player.state().index);
+
+    M.act(findRef(M.snapshot().tree, 'button', '上一首'), 'click');
+    await wait(120);
+    ok('点上一首 index 回来了', M.player.state().index === 0, 'index=' + M.player.state().index);
+
+    /* ------------------------------- 6. 音量与音质（降级看得见） */
+
+    var vol = doc.querySelectorAll('#m-view .m-np-range')[1];
+    vol.value = '0.4';
+    vol.dispatchEvent(new W.Event('input', { bubbles: true }));
+    await wait(120);
+    ok('音量可调', Math.abs(M.player.state().volume - 0.4) < 0.01,
+      'volume=' + M.player.state().volume);
+
+    M.act(findRef(M.snapshot().tree, 'button', '音质'), 'click');
+    await wait(150);
+    var note = doc.querySelector('#m-view .m-np-quality-note');
+    ok('降级看得见：你选的与实际放的都摆出来',
+      note && note.textContent.indexOf('你选了') >= 0 && note.textContent.indexOf('实际放的是') >= 0,
+      note ? note.textContent : '（空）');
+    var qBtn = doc.querySelector('#m-view .m-np-quality');
+    ok('音质按钮显示的是实际生效的音质',
+      qBtn && qBtn.textContent.indexOf('标准') >= 0, qBtn ? qBtn.textContent : '');
+
+    /* ------------------------------- 7. 队列 */
+
+    M.act(findRef(M.snapshot().tree, 'button', '队列'), 'click');
+    await wait(250);
+    ok('进入队列视图', M.state.view.type === 'queue', M.state.view.type);
+    ok('队列里有内容', doc.querySelectorAll('#m-view .m-track-btn').length > 0);
+    M.back();
+    await wait(250);
+    ok('从队列回到播放页', M.state.view.type === 'nowplaying', M.state.view.type);
+
+    /* ------------------------------- 8. 收起 */
+
+    M.act(findRef(M.snapshot().tree, 'button', '收起'), 'click');
+    await wait(250);
+    ok('收起后回到来源页面', M.state.view.type === 'home', M.state.view.type);
+    ok('收起后底部导航恢复',
+      W.getComputedStyle(doc.getElementById('m-nav')).display !== 'none');
+    ok('收起后迷你条恢复',
+      W.getComputedStyle(doc.getElementById('m-mini')).display !== 'none');
+    ok('收起后 m-np 标记去掉', !doc.body.classList.contains('m-np'));
+
+    finish();
+  } catch (e) {
+    failures.push('异常：' + (e && e.message ? e.message : String(e)));
+    finish();
+  }
+}
+</script>
+</body>
+</html>

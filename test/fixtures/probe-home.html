@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<title>Kumone 主页自检</title>
+<style>
+  body { font: 13px/1.6 system-ui, sans-serif; margin: 20px; }
+  iframe { width: 390px; height: 760px; border: 1px solid #ddd; }
+  pre { background: #0a0a0a; color: #e8e8ea; padding: 12px; border-radius: 10px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<!--
+  自检探针：主页（ticket 08）的状态机与语义契约。
+
+  这里不打真网络 —— 把 Mobile.service 换成假服务，注入固定返回，
+  再重新渲染，逐个场景断言：
+
+    1. 成功路径：五个区块都出内容；快照里能读到五个区块标题与卡片 ref
+    2. 落点路径：点歌单卡能进详情，底部导航当前项仍是「主页」
+    3. 错误路径：只有一个区块失败 → 只有它变成错误卡，且带「重试」
+    4. 未登录路径：每日推荐显示登录引导，点它能进扫码页
+-->
+<iframe id="app" src="/www/index.html"></iframe>
+<pre id="result" data-result="PENDING">PENDING</pre>
+<pre id="diag" data-diag="PENDING"></pre>
+
+<script>
+var out = document.getElementById('result');
+var failures = [];
+function ok(name, cond, extra) {
+  if (!cond) failures.push(name + (extra ? ' :: ' + extra : ''));
+}
+function finish() {
+  var okAll = failures.length === 0;
+  out.setAttribute('data-result', okAll ? 'PASS' : 'FAIL');
+  out.textContent = (okAll ? 'PASS ' : 'FAIL ') +
+    (okAll ? '主页状态机与语义契约自检通过' : ('失败项：' + failures.join('；')));
+}
+function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+var TRACK = {
+  id: 11, name: '测试曲目', durationMS: 200000,
+  artists: [{ id: 1, name: '甲' }], album: { id: 2, name: '测试专辑', picUrl: '' }
+};
+var PLAYLIST = { id: 22, name: '测试歌单', cover: '', creator: { nickname: '某人' }, playCount: 12345, trackCount: 30 };
+var ARTIST = { id: 33, name: '测试歌手', pic: '', alias: ['别名'] };
+var ALBUM = { id: 44, name: '测试专辑', pic: '', artistName: '甲', size: 9 };
+
+/** 造一个假服务层：每个方法可给固定返回或函数。 */
+function fakeService(overrides) {
+  var base = {
+    isLoggedIn: function () { return Promise.resolve(true); },
+    dailyRecommend: function () { return Promise.resolve({ ok: true, data: [TRACK, TRACK] }); },
+    recommendedPlaylists: function () { return Promise.resolve({ ok: true, data: [PLAYLIST] }); },
+    toplists: function () { return Promise.resolve({ ok: true, data: [PLAYLIST] }); },
+    topArtists: function () { return Promise.resolve({ ok: true, data: [ARTIST] }); },
+    newAlbums: function () { return Promise.resolve({ ok: true, data: [ALBUM] }); },
+    playlistDetail: function () {
+      return Promise.resolve({ ok: true, data: { playlist: PLAYLIST, tracks: [TRACK] } });
+    },
+    artist: function () { return Promise.resolve({ ok: true, data: { artist: ARTIST, hotSongs: [TRACK] } }); },
+    album: function () { return Promise.resolve({ ok: true, data: { album: ALBUM, songs: [TRACK] } }); },
+    account: function () { return Promise.resolve({ ok: true, data: { nickname: '某人' } }); },
+    qrKey: function () { return Promise.resolve({ ok: true, data: 'uk' }); },
+    qrImage: function () { return Promise.resolve({ ok: true, data: 'data:image/png;base64,AA==' }); },
+    qrCheck: function () { return Promise.resolve({ ok: true, data: { code: 801, message: '等待扫码' } }); }
+  };
+  Object.keys(overrides || {}).forEach(function (k) { base[k] = overrides[k]; });
+  return base;
+}
+
+function findRef(tree, role, name) {
+  var re = new RegExp(role + ' "' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '" \\[ref=(@\\d+)');
+  var m = tree.match(re);
+  return m ? m[1] : null;
+}
+function hasRef(tree, role, name) {
+  return !!findRef(tree, role, name);
+}
+
+var frame = document.getElementById('app');
+frame.addEventListener('load', function () {
+  setTimeout(run, 800);
+});
+
+async function run() {
+  try {
+    var W = frame.contentWindow;
+    var M = W.Mobile;
+
+    /* --------------------------------------- 1. 成功路径 */
+
+    M.service = fakeService();
+    M.render();
+    await wait(400);
+
+    var snap = M.snapshot();
+    ok('快照能拿到', snap.ok === true);
+
+    var titles = ['每日推荐', '推荐歌单', '排行榜', '推荐歌手', '新碟上架'];
+    titles.forEach(function (t) {
+      ok('快照里有区块「' + t + '」', snap.tree.indexOf('region "' + t + '"') >= 0);
+    });
+
+    // 卡片要有语义名与 ref（模型侧要能定位）
+    ok('歌单卡有语义名', hasRef(snap.tree, 'button', '歌单 测试歌单'));
+    ok('歌手卡有语义名', hasRef(snap.tree, 'button', '歌手 测试歌手'));
+    ok('专辑卡有语义名', hasRef(snap.tree, 'button', '专辑 测试专辑'));
+    ok('曲目行有语义名', hasRef(snap.tree, 'button', '播放 测试曲目 · 甲'));
+
+    // 骨架必须被真实内容替换（不能永远转圈）
+    var doc = W.document;
+    var skeletons = doc.querySelectorAll('#m-view .m-skeleton').length;
+    ok('骨架已被真实内容替换', skeletons === 0, '还剩 ' + skeletons + ' 个骨架');
+
+    /* --------------------------------------- 2. 落点路径 */
+
+    var plRef = findRef(M.snapshot().tree, 'button', '歌单 测试歌单');
+    var receipt = M.act(plRef, 'click');
+    ok('点击歌单卡成功', receipt.ok === true, JSON.stringify(receipt));
+    ok('进入了歌单详情', M.state.view.type === 'playlist', M.state.view.type);
+    ok('底部导航当前项仍是主页',
+      doc.querySelector('#m-nav .m-tab[data-view="home"]').getAttribute('aria-current') === 'page');
+    ok('返回按钮出现',
+      doc.getElementById('m-back').classList.contains('visible'));
+    await wait(300);
+
+    /* --------------------------------------- 3. 错误路径（只坏一个区块） */
+
+    // 先回到主页：上一场已经把界面切到歌单详情了
+    M.goTab('home');
+    await wait(100);
+
+    M.service = fakeService({
+      recommendedPlaylists: function () {
+        return Promise.resolve({
+          ok: false, code: 'KUMONE_NETWORK', kind: 'transient',
+          title: '网络不可用',
+          message: '网络不可用\nExpected: await recommendedPlaylists\nState: 请求未到达服务端\nNext: 重试；连续失败说明本机网络不可用'
+        });
+      }
+    });
+    M.render();
+    await wait(400);
+
+    var errCards = doc.querySelectorAll('#m-view .m-err');
+    ok('失败的区块变成错误卡', errCards.length === 1, '错误卡数量 ' + errCards.length);
+    ok('错误卡带上了稳定错误码',
+      errCards.length === 1 && errCards[0].getAttribute('data-code') === 'KUMONE_NETWORK');
+    ok('transient 错误给的是「重试」',
+      errCards.length === 1 && /重试/.test(errCards[0].textContent));
+    ok('其余区块照常渲染',
+      doc.querySelectorAll('#m-view .m-tile').length > 0 &&
+      doc.querySelectorAll('#m-view .m-track').length > 0 &&
+      doc.querySelectorAll('#m-view .m-rank').length > 0);
+
+    /* --------------------------------------- 4. 未登录路径 */
+
+    M.goTab('home');
+    await wait(100);
+
+    M.service = fakeService({
+      isLoggedIn: function () { return Promise.resolve(false); },
+      dailyRecommend: function () {
+        return Promise.resolve({
+          ok: false, code: 'KUMONE_NEED_LOGIN', kind: 'permanent',
+          title: '需要登录',
+          message: '需要登录\nExpected: await dailyRecommendSongs\nState: 账号未登录或 MUSIC_U 已失效\nNext: 扫码登录后重试'
+        });
+      }
+    });
+    M.render();
+    await wait(400);
+
+    var loginCards = doc.querySelectorAll('#m-view .m-login');
+    ok('每日推荐显示登录引导', loginCards.length >= 1, '登录引导数量 ' + loginCards.length);
+    ok('登录引导给的是「扫码登录」而不是「重试」',
+      loginCards.length >= 1 && /扫码登录/.test(loginCards[0].textContent) &&
+      !/重试/.test(loginCards[0].textContent));
+
+    var snap2 = M.snapshot();
+    var loginRef = findRef(snap2.tree, 'button', '扫码登录');
+    ok('登录引导按钮有 ref（模型能点）', !!loginRef);
+    if (loginRef) {
+      var r2 = M.act(loginRef, 'click');
+      ok('点登录引导能进扫码页', r2.ok === true && M.state.view.type === 'login', M.state.view.type);
+    }
+
+    finish();
+  } catch (e) {
+    failures.push('异常：' + (e && e.message ? e.message : String(e)));
+    finish();
+  }
+}
+</script>
+</body>
+</html>
