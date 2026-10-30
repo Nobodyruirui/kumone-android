@@ -87,6 +87,12 @@ export async function runProbe(probePath, opts = {}) {
 
   if (server) server.kill();
 
+  // 跑完就把临时 profile 删掉：每次跑测新建一个 profile，
+  // 不清的话一次几百 MB、几十次就是几个 GB（实测堆到过 6 GB）。
+  try {
+    if (existsSync(profile)) rmSync(profile, { recursive: true, force: true, maxRetries: 3 });
+  } catch { /* 删不掉就留给系统清理 %TEMP%，别让测试失败 */ }
+
   const dom = out.stdout || '';
   // 结果容器有两种：<pre id="result"> 与 <div id="result">，都认
   const m = dom.match(/id="result" data-result="([A-Z]+)"[^>]*>([\s\S]*?)<\/(?:pre|div)>/);
