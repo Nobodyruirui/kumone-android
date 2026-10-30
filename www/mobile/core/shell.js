@@ -121,6 +121,11 @@
     // 全屏播放页：占满屏幕，底部导航与迷你条都要消失（ADR-0002）
     // 隐藏逻辑放在外壳层，任何视图都能要求「藏起外壳」，视图自己不碰。
     setFullscreen(!!(view && view.type === 'nowplaying'));
+
+    // 扫码登录与播放队列是**沉浸式流程**：藏起导航与迷你条。
+    // 否则会出现「底部导航一个高亮都没有」——用户点了「资料库」却看不到它被选中；
+    // 队列是从全屏播放页进来的，导航一冒出来，播放器就「塌」回普通页面了。
+    setFocused(!!(view && (view.type === 'login' || view.type === 'queue')));
   }
 
   /**
@@ -129,6 +134,14 @@
    */
   function setFullscreen(on) {
     document.body.classList.toggle('m-np', !!on);
+  }
+
+  /**
+   * 沉浸式流程开关：藏起导航与迷你播放条（顶栏保留，返回箭头要用）。
+   * @param {boolean} on
+   */
+  function setFocused(on) {
+    document.body.classList.toggle('m-focus', !!on);
   }
 
   // 迷你播放条内容
@@ -284,5 +297,5 @@
     }
   }
 
-  M.shell = { boot: boot, sync: sync, setMini: setMini, setMiniPlaying: setMiniPlaying, setMiniProgress: setMiniProgress, setAccount: setAccount, setFullscreen: setFullscreen, confirm: confirmDialog, toast: toast, TABS: TABS };
+  M.shell = { boot: boot, sync: sync, setMini: setMini, setMiniPlaying: setMiniPlaying, setMiniProgress: setMiniProgress, setAccount: setAccount, setFullscreen: setFullscreen, setFocused: setFocused, confirm: confirmDialog, toast: toast, TABS: TABS };
 })(window.Mobile = window.Mobile || {});

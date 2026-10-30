@@ -781,6 +781,12 @@ body.m-np #m-main { padding-bottom: 24px; }
    留一条只剩返回箭头的空白边反而像没做完 */
 body.m-np #m-header { display: none; }
 
+/* 沉浸式流程（扫码登录）：藏起导航与迷你条，屏幕上只剩二维码。
+   顶栏保留 —— 返回箭头要用。 */
+body.m-focus #m-nav,
+body.m-focus #m-mini { display: none; }
+body.m-focus #m-main { padding-bottom: 24px; }
+
 .m-np-top {
   display: flex;
   justify-content: flex-end;

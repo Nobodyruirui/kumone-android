@@ -253,7 +253,34 @@ check('播放历史：重复播放后把旧记录挪到前面', player.history()
 player.clearHistory();
 check('播放历史：清空后为空', player.history().length === 0);
 
-/* ------------------------------------------ 12. 引擎不写 DOM */
+/* ------------------------------------------ 12. 地址为空时不能崩 */
+
+service = {
+  // 网易云对 VIP / 无版权的歌会「成功但 url 为空」
+  songUrl: () => Promise.resolve({ ok: true, data: null }),
+  unblock: () => Promise.resolve({ ok: false, code: 'KUMONE_UNBLOCK_FAILED', kind: 'permanent' })
+};
+audio = fakeAudio();
+player = createPlayer({ service, audio, store: fakeStore() });
+await player.playQueue([track(9)], 0);
+check('地址为空：不抛异常，报 KUMONE_UNBLOCK_FAILED',
+  player.state().error && player.state().error.code === 'KUMONE_UNBLOCK_FAILED',
+  JSON.stringify(player.state().error));
+check('地址为空：错误是 permanent（不重试）',
+  player.state().error && player.state().error.kind === 'permanent');
+
+service = {
+  songUrl: () => Promise.resolve({ ok: true, data: null }),
+  unblock: () => Promise.resolve({ ok: true, data: { url: 'https://third/9.mp3', source: 'kuwo' } })
+};
+audio = fakeAudio();
+player = createPlayer({ service, audio, store: fakeStore() });
+await player.playQueue([track(9)], 0);
+check('地址为空但兜底成功：走第三方音源播了',
+  audio.src === 'https://third/9.mp3' && !player.state().error,
+  'src=' + audio.src);
+
+/* ------------------------------------------ 13. 引擎不写 DOM */
 
 const src = require('node:fs').readFileSync(
   new URL('../www/mobile/core/player.js', import.meta.url), 'utf8');

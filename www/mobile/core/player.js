@@ -352,8 +352,29 @@
           trial = !!(res.data.freeTrialInfo);
           break;
         }
-        last = res;
-        if (res && res.code === 'KUMONE_NEED_LOGIN') break;       // 登录中断不该被降级掩盖
+        if (res && res.code === 'KUMONE_NEED_LOGIN') {           // 登录中断不该被降级掩盖
+          last = res;
+          break;
+        }
+        if (res && res.ok) {
+          // 「请求成功但没有可播放地址」（VIP / 无版权时网易云会这么回）：
+          // 这一档音质不可用，**继续降级**，别当成成功。
+          // 注意不能把 res 原样留着 —— 它 ok:true 但 data 可能是 null，
+          // 后面读 last.data.level 会直接抛异常。
+          last = {
+            ok: false,
+            code: 'KUMONE_UNBLOCK_FAILED',
+            kind: 'permanent',
+            title: '音源解锁失败',
+            message: '音源解锁失败\nExpected: await service.songUrl(id, ' + levels[i] + ')\n' +
+              'State: 服务返回了响应，但里面没有可播放地址\n' +
+              'Blocked by: 这一档音质（' + levels[i] + '）拿不到地址\n' +
+              'Next: 换一首，或确认音源解锁兜底已开启',
+            next: '换一首，或确认音源解锁兜底已开启'
+          };
+        } else {
+          last = res;   // 请求本身就失败了 —— 保留服务层给的契约错误，别覆盖
+        }
       }
 
       // 路径二：换来源（第三方音源兜底）。与音质降级是两条不同的路径。
