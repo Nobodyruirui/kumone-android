@@ -1,9 +1,8 @@
 # ego-lite 的界面设计理论（摘要与出处）
 
 > **出处**：本文是对 [citrolabs/ego-lite](https://github.com/citrolabs/ego-lite)（MIT）界面设计理论的**摘要**，用于指导本项目的界面设计。
-> **原始分析文档**（完整版，33KB，含 `文件:行号` 证据链）：
-> `C:\Users\17825\.minimax\v2\assets\2026\10\29\21-14-55-859-asset_20261029-211455-859_cf36c0aec41e_1a36a738-ego-lite-UI设计理论.md`
-> **源码快照**：`D:\APP DATE\DSH(D)\测试\ego-lite-src\ego-lite-main\`
+> **原始分析文档**（完整版，33KB，含 `文件:行号` 证据链）：本机的分析产物，不随仓库分发。
+> **源码快照**：本机单独拉取的 `citrolabs/ego-lite` 副本，不随仓库分发。
 > **本项目的落地决策**：`docs/adr/0003-双模态界面与ego视觉语言.md`
 
 ---

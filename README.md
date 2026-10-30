@@ -185,13 +185,13 @@ Windows 上还需要：
 |---|---|
 | Android SDK | `compileSdk 35` + `build-tools 35.0.0`（本机在 `D:\Android\Sdk`） |
 | `android/local.properties` | 写 `sdk.dir=D\:\\Android\\Sdk`（不入库） |
-| `JAVA_HOME` | 指向 **JDK 21**（本机用的是 `C:\Users\17825\.local\jdk21\jdk-21.0.13+9`） |
+| `JAVA_HOME` | 指向 **JDK 21**（本机装在 `%USERPROFILE%\.local\jdk21\jdk-21.0.13+9`） |
 | 仓库路径含中文 | `android/gradle.properties` 需要 `android.overridePathCheck=true`，否则 AGP 直接拒绝构建 |
 
 PowerShell 里构建：
 
 ```powershell
-$env:JAVA_HOME = "C:\Users\17825\.local\jdk21\jdk-21.0.13+9"
+$env:JAVA_HOME = "$env:USERPROFILE\.local\jdk21\jdk-21.0.13+9"
 $env:PATH = "$env:JAVA_HOME\bin;$env:PATH"
 .\android\gradlew.bat -p ".\android" assembleDebug --console=plain
 ```
