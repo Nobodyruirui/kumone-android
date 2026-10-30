@@ -223,6 +223,44 @@ function checkCodeTableAlignment(packDir, manifest, manifestPath) {
   return { checked, authoritativeCount: Object.keys(authoritative).length };
 }
 
+/* ------------------------------------------- 动作白名单对齐（权威 vs 副本） */
+
+const ACTIONS_SOURCE = path.join(ROOT, 'www', 'mobile', 'core', 'snapshot.js');
+
+/**
+ * 权威动作白名单：从 snapshot.js 的 ACTIONS 字面量里取出键。
+ * 知识包的 manifest 也声明了一份（要能独立拷走），漂移了就没人知道哪个是真的。
+ */
+function loadAuthoritativeActions() {
+  try {
+    const src = fs.readFileSync(ACTIONS_SOURCE, 'utf8');
+    const m = src.match(/var\s+ACTIONS\s*=\s*\{([\s\S]*?)\n\s*\};/);
+    if (!m) return null;
+    const keys = [];
+    const re = /([A-Za-z_][A-Za-z0-9_]*)\s*:\s*function/g;
+    let hit;
+    while ((hit = re.exec(m[1])) !== null) keys.push(hit[1]);
+    return keys;
+  } catch (e) {
+    fail(`权威动作白名单读取失败：${rel(ACTIONS_SOURCE)} —— ${e.message}`);
+    return null;
+  }
+}
+
+/** 校验 manifest.locator.actions 与 snapshot.js 的 ACTIONS 一致。 */
+function checkActionAlignment(manifest, manifestPath) {
+  const authoritative = loadAuthoritativeActions();
+  if (!authoritative) return null;
+  const declared = (manifest && manifest.locator && manifest.locator.actions) || [];
+  const a = [...authoritative].sort().join(',');
+  const b = [...declared].sort().join(',');
+  if (a !== b) {
+    fail(`动作白名单漂移：${rel(manifestPath)} 声明的是 [${b}]，` +
+      `而 ${rel(ACTIONS_SOURCE)} 实现的是 [${a}] —— 知识包必须能独立拷走，两处得一致`);
+  }
+  return { authoritative, declared };
+}
+
 /* ------------------------------------------------------- 校验知识包 */
 
 async function validatePack(packDir) {
@@ -266,6 +304,12 @@ async function validatePack(packDir) {
   // 码表对齐：副本必须与权威表一致
   const codeAlign = checkCodeTableAlignment(packDir, manifest, manifestPath);
   report.codeAlignment = codeAlign;
+
+  // 动作白名单对齐：manifest 声明的必须与 snapshot.js 的 ACTIONS 一致
+  const actionAlign = checkActionAlignment(manifest, manifestPath);
+  if (actionAlign) {
+    report.actionAlignment = actionAlign;
+  }
 
   // notes：声明的文件必须存在
   for (const note of manifest.notes || []) {
@@ -377,6 +421,9 @@ async function main() {
     console.log(`▌${report.name || report.site}（${report.site} v${report.version}）  ${rel(report.dir)}`);
     if (report.codeAlignment && report.codeAlignment.checked) {
       console.log(`  码表  ${report.codeAlignment.checked} 个码已与权威表（${report.codeAlignment.authoritativeCount} 码）对齐`);
+    }
+    if (report.actionAlignment) {
+      console.log(`  动作  白名单 [${report.actionAlignment.authoritative.join(' / ')}] 与实现一致`);
     }
     for (const helper of report.helpers) {
       console.log(`  helper ${helper.name}  ${helper.file}  → ${helper.exports.join(', ')}`);

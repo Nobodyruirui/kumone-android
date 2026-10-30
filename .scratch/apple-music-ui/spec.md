@@ -34,7 +34,7 @@ Feature: apple-music-ui
 
 ### 1.3 双模态：感知层与动作层已就位，缺的是稳定定位与接线
 
-- `www/mobile/core/snapshot.js` 已实现：ref 分配与复用（`refFor`，`:28-36`）、ref 解析与过期判定（`resolve`，`:39-53`，报 `KUMONE_STALE_REF`）、语义抽取与折叠（`extract`，`:131-169`，`:128-129` 的红线是「任何非空文本都不被删改」）、动作白名单 `click` / `scroll` / `focus`（`ACTIONS`，`:221-229`）、动作执行（`act`，`:235-261`，白名单外报 `KUMONE_UNSUPPORTED`）。
+- `www/mobile/core/snapshot.js` 已实现：ref 分配与复用（`refFor`，`:28-36`）、ref 解析与过期判定（`resolve`，`:39-53`，报 `KUMONE_STALE_REF`）、语义抽取与折叠（`extract`，`:131-169`，`:128-129` 的红线是「任何非空文本都不被删改」）、动作白名单 `click` / `scroll` / `focus` / `fill`（`ACTIONS`，`:221-229`）、动作执行（`act`，`:235-261`，白名单外报 `KUMONE_UNSUPPORTED`）。
 - **只读已经是真的**：`refFor` 用 `WeakMap`（`:21`）保存 element → ref，**不往 DOM 写任何东西**（`:26` 的注释明确写了这一点）；快照根从 `#m-app` 改成 `document.body`（`:195`），否则模型看不到挂在 body 上的底部导航与迷你播放条；`live` 映射在每次快照时清理已卸载节点（`:211`）。已有只读回归测试 `test/snapshot-readonly.mjs`，动作层回归测试 `test/model-actions.mjs`。
 - **缺口一**：**核心层没有 locator API**。role + name 的匹配实现放在知识包 `www/mobile/learnings/netease/tools/locator.js`（`parseTree` `:104-140`、`findMatches` `:200-213`、`candidateNames` `:216-226`），也就是说**稳定定位只在「加载了知识包」时可用**，`Mobile.snapshot()` / `Mobile.act()` 本身仍只认 ref。ADR-0003 §2 规定的「快照 ref > 语义 locator > 裸 CSS」三层优先级，模型侧目前只能用到第一层。
 - **缺口二**：**视图重建导致 ref 断裂**。`www/mobile/core/router.js:52-58` 的 `M.render()` 每次都 `root.textContent = ''` 再重建 `#m-view`，因此同一语义元素在切换视图后是**新的 DOM 节点**、新的 ref。`resolve()` 能正确报 `KUMONE_STALE_REF`（`snapshot.js:39-53`），但这只是把「静默失败」变成「明确报错」，没有提供任何稳定的重新定位手段。
@@ -148,7 +148,7 @@ Feature: apple-music-ui
 - **R48** 让同一元素在同一视图内重复快照时 ref 保持不变（已由 `WeakMap` + `test/snapshot-readonly.mjs` 保证）；并让视图重建后语义上同一个元素能通过**稳定 locator** 重新解析到等价目标，不要求模型记住旧 ref。
 - **R49** 让快照的降噪遵守红线：可折叠结构（无名空容器删除、单子节点容器用子节点替换自身），但**永远不许删改非空页面文本**。
 - **R50** 让可交互元素一律用语义标签（`button` / `nav` / `main` / `h1` / `li`）并带 `aria-label`；**无障碍树就是界面契约**，定位靠 role + name，坐标是最后手段；禁止裸 CSS 选择器与硬编码坐标作为模型定位手段。
-- **R51** 让 `Mobile.act()` 的动作严格受白名单约束（`click` / `scroll` / `focus`）；白名单外的动作必须返回 `KUMONE_UNSUPPORTED` 并列出可用动作，不得静默忽略。
+- **R51** 让 `Mobile.act()` 的动作严格受白名单约束（`click` / `scroll` / `focus` / `fill`）；白名单外的动作必须返回 `KUMONE_UNSUPPORTED` 并列出可用动作，不得静默忽略。
 - **R52** 保持观察只读：`snapshot()` 不改变播放状态、不发请求、不改焦点、**不写 DOM**（`refFor` 不得写 `data-mref` 之类的标记属性）；维持 `test/snapshot-readonly.mjs` 为回归闸。
 - **R53** 让状态可查询、转移可命名：播放状态由 `player.state()` 查询，转移由 `play` / `pause` / `seek` / `next` / `prev` / `queue` / `setQuality` 等命名动词表达，不允许直接改 DOM 来模拟状态变化。
 
@@ -247,7 +247,7 @@ Feature: apple-music-ui
 
 **D2 · 手势（上滑出队列、下滑收起播放页、左右滑切歌、滑动返回）**
 
-- **为什么不做**：手势与「点击」不是同一类交互，模型侧的动作白名单（`click` / `scroll` / `focus`）无法表达它们；要支持就得把「模型可读界面」扩成一套触摸协议，复杂度与本轮目标不匹配。
+- **为什么不做**：手势与「点击」不是同一类交互，模型侧的动作白名单（`click` / `scroll` / `focus` / `fill`）无法表达它们；要支持就得把「模型可读界面」扩成一套触摸协议，复杂度与本轮目标不匹配。
 - **不做会怎样**：收起播放页、打开队列、切歌都改用显式按钮完成，功能不缺但少了一分顺手；模型驱动场景完全不受影响（它本来就用 `act` 而非手势）。
 - **什么时候做**：在模型侧动作白名单之外单开一张票设计触摸协议时；设计时必须同时回答「模型要不要能驱动手势」。
 
@@ -324,7 +324,7 @@ Feature: apple-music-ui
 - [ ] **M2 ref 稳定**：连续两次 `Mobile.snapshot()`，同一元素的 ref 相同（两次都出现 `button "资料库" [ref=@12]`）。
 - [ ] **M3 动作白名单**：`Mobile.act("@12", "click")` 返回 `{ ok: true, action: 'click', ref: '@12', role: 'button', name: '资料库' }`，且界面发生对应变化。
 - [ ] **M4 stale ref**：切走视图使元素被卸载，再执行 `Mobile.act("@12", "click")` → `ok: false`、`code === 'KUMONE_STALE_REF'`、`kind === 'permanent'`，且 message 的 `Next` 段给出「重新取一次快照」。
-- [ ] **M5 非白名单动作**：`Mobile.act("@12", "swipe")` → `ok: false`、`code === 'KUMONE_UNSUPPORTED'`，message 的 `Blocked by` 段列出 `click / scroll / focus`。
+- [ ] **M5 非白名单动作**：`Mobile.act("@12", "swipe")` → `ok: false`、`code === 'KUMONE_UNSUPPORTED'`，message 的 `Blocked by` 段列出 `click / scroll / focus / fill`。
 - [ ] **M6 稳定 locator**：用 role + name 的稳定 locator 定位「资料库」导航项并点击，无需记住上一次的 ref 也能命中同一元素。
 - [ ] **M7 只读观察**：`Mobile.snapshot()` 前后各读一次播放状态 → 两次读数完全一致；调用期间 Network 面板无新增请求；`document.activeElement` 未改变；**DOM 未被写入**（不产生 `data-mref` 之类的标记属性）。
 - [ ] **M8 按码分支**：构造一个 `permanent` 错误进入等待循环 → **立即抛出**而不是继续轮询；构造一个 `transient` 错误 → 允许重试一次。

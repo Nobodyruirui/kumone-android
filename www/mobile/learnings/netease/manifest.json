@@ -32,7 +32,8 @@
     "actions": [
       "click",
       "scroll",
-      "focus"
+      "focus",
+      "fill"
     ]
   },
   "errorCodes": {

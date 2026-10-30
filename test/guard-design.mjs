@@ -79,11 +79,12 @@ function uiTotal(refs, base) {
 // 上限是**上下文预算**，不是"越紧越好"：
 //   界面与契约层 80KB → 128KB（ticket 08 主页五区块 + 详情页 + ticket 06 扫码登录）
 //   → 160KB（ticket 10 资料库：入口页 + 五个二级列表 + 账号区 + 确认弹窗）
+//   → 192KB（ticket 09 全屏播放页 + ticket 15 广播与搜索两屏）
 //   每一档的涨幅都是实打实的界面代码，不是可以砍掉的冗余。
-//   剩下的余量留给 ticket 09（全屏播放页）。
+//   这个闸是防「无节制地往界面层堆东西」，不是卡死一个具体数字。
 const LIMITS = [
   { label: 'CSS', max: 48 * 1024, kind: 'css' },
-  { label: 'JS 界面与契约层', max: 160 * 1024, kind: 'ui' },
+  { label: 'JS 界面与契约层', max: 192 * 1024, kind: 'ui' },
   { label: 'JS 知识层', max: 32 * 1024, kind: 'knowledge' },
   { label: '字体', max: 128 * 1024, kind: 'fonts' }
 ];

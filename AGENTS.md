@@ -59,7 +59,7 @@ Issue 与 spec 以 markdown 文件存放在 `.scratch/`（本地文件追踪）�
 | 接口 | 作用 |
 | --- | --- |
 | `Mobile.snapshot(opts?)` | 当前界面的语义文本树。`opts.scope='subtree'` + `opts.root='@N'` 取子树 |
-| `Mobile.act(ref, action, args?)` | 对 ref 执行动作。白名单：`click` / `scroll` / `focus` |
+| `Mobile.act(ref, action, args?)` | 对 ref 执行动作。白名单：`click` / `scroll` / `focus` / `fill` |
 | `Mobile.nav/back/goTab(view)` | 导航栈（与上游语义一致） |
 | `Mobile.views[type]` | 视图注册表，值形如 `{ title, render(view) }` |
 | `Mobile.shell.toast(msg)` / `setMini(track)` / `setMiniProgress(ratio)` | 外壳操作 |

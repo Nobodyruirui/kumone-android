@@ -962,3 +962,144 @@ body.m-np #m-header { display: none; }
   color: var(--ink-2);
   margin-bottom: 6px;
 }
+
+/* =============================================================
+ * 广播（私人 FM）
+ * ============================================================= */
+
+.m-fm-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.m-fm-cover {
+  width: 96px;
+  height: 96px;
+  flex-shrink: 0;
+  object-fit: cover;
+  border-radius: var(--radius-card);
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+}
+.m-fm-info { min-width: 0; flex: 1; }
+.m-fm-name {
+  font-size: var(--fs-title);
+  font-weight: var(--fw-title);
+  letter-spacing: -0.3px;
+  line-height: 1.2;
+}
+.m-fm-artist {
+  margin-top: 2px;
+  font-size: var(--fs-body);
+  color: var(--ink-2);
+}
+.m-fm-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+.m-fm-note {
+  margin: 18px 0 6px;
+  font-size: var(--fs-note);
+  font-weight: var(--fw-note);
+  font-style: italic;
+  color: var(--ink-2);
+}
+
+/* =============================================================
+ * 搜索
+ * ============================================================= */
+
+.m-search-bar {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+.m-search-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: var(--fs-body);
+}
+.m-search-input:focus {
+  outline: 2px solid var(--ink);
+  outline-offset: -1px;
+}
+
+/* 类型切换 */
+.m-tabs {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.m-tabs::-webkit-scrollbar { display: none; }
+.m-tab-chip {
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--ink-2);
+  font-family: inherit;
+  font-size: var(--fs-caption);
+  font-weight: 500;
+  padding: 6px 14px;
+  cursor: pointer;
+}
+.m-tab-chip.current {
+  border-color: var(--line-strong);
+  background: var(--ink);
+  color: var(--surface);
+  font-weight: 700;
+}
+
+/* 联想 */
+.m-suggest { margin-top: 10px; }
+/* 作者样式里不写 display，但显式兜一条：hidden 才不会失效 */
+.m-suggest[hidden] { display: none; }
+.m-suggest-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.m-suggest-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  max-width: 100%;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: var(--fs-caption);
+  padding: 6px 12px;
+  cursor: pointer;
+  text-align: left;
+}
+.m-suggest-kind {
+  font-size: var(--fs-tiny);
+  color: var(--ink-3);
+  flex-shrink: 0;
+}
+.m-suggest-name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* 结果 */
+.m-result-note {
+  margin: 14px 0 8px;
+  font-size: var(--fs-note);
+  font-weight: var(--fw-note);
+  font-style: italic;
+  color: var(--ink-2);
+}

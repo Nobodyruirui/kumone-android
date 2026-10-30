@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<title>Kumone 广播与搜索自检</title>
+<style>
+  body { font: 13px/1.6 system-ui, sans-serif; margin: 20px; }
+  iframe { width: 390px; height: 760px; border: 1px solid #ddd; }
+  pre { background: #0a0a0a; color: #e8e8ea; padding: 12px; border-radius: 10px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<!--
+  自检探针：广播页与搜索页（ticket 15）。
+
+  重点验三件事：
+    1. 广播页出内容，「下一首」「不喜欢这首」两个动作都在
+    2. 搜索页能被**模型**驱动：快照找到输入框 → act(ref,'fill') 写字
+       → 点「搜索」→ 出结果
+    3. 动作白名单仍然是硬的：白名单外的动作报 KUMONE_UNSUPPORTED，
+       对不可填写的元素 fill 也报 KUMONE_UNSUPPORTED
+-->
+<iframe id="app" src="/www/index.html"></iframe>
+<pre id="result" data-result="PENDING">PENDING</pre>
+
+<script>
+var out = document.getElementById('result');
+var failures = [];
+function ok(name, cond, extra) {
+  if (!cond) failures.push(name + (extra ? ' :: ' + extra : ''));
+}
+function finish() {
+  var okAll = failures.length === 0;
+  out.setAttribute('data-result', okAll ? 'PASS' : 'FAIL');
+  out.textContent = (okAll ? 'PASS ' : 'FAIL ') +
+    (okAll ? '广播与搜索自检通过' : ('失败项：' + failures.join('；')));
+}
+function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+var TRACK = {
+  id: 11, name: '广播曲目', durationMS: 200000,
+  artists: [{ id: 1, name: '甲乐队' }], album: { id: 2, name: '广播专辑', picUrl: '' }
+};
+var PL = { id: 22, name: '搜索歌单', cover: '', creator: { nickname: '乙' } };
+
+function fakeService(overrides) {
+  var base = {
+    isLoggedIn: function () { return Promise.resolve(true); },
+    account: function () { return Promise.resolve({ ok: true, data: { userId: 77, nickname: '测试', avatarUrl: '', vipType: 0 } }); },
+    dailyRecommend: function () { return Promise.resolve({ ok: true, data: [TRACK] }); },
+    recommendedPlaylists: function () { return Promise.resolve({ ok: true, data: [PL] }); },
+    toplists: function () { return Promise.resolve({ ok: true, data: [PL] }); },
+    topArtists: function () { return Promise.resolve({ ok: true, data: [{ id: 3, name: '歌手', pic: '', alias: [] }] }); },
+    newAlbums: function () { return Promise.resolve({ ok: true, data: [{ id: 4, name: '专辑', pic: '', artistName: '甲' }] }); },
+    myPlaylists: function () { return Promise.resolve({ ok: true, data: [PL] }); },
+    likedSongs: function () { return Promise.resolve({ ok: true, data: [TRACK] }); },
+    cloudSongs: function () { return Promise.resolve({ ok: true, data: [] }); },
+    playRecords: function () { return Promise.resolve({ ok: true, data: [] }); },
+    // 广播
+    personalFM: function () { return Promise.resolve({ ok: true, data: [TRACK] }); },
+    fmTrash: function () { return Promise.resolve({ ok: true, data: true }); },
+    // 搜索
+    search: function () {
+      return Promise.resolve({ ok: true, data: {
+        songs: [TRACK], albums: [{ id: 4, name: '搜到的专辑', pic: '', artistName: '甲' }],
+        artists: [{ id: 3, name: '搜到的歌手', pic: '', alias: [] }],
+        playlists: [PL],
+        counts: { songs: 1, albums: 1, artists: 1, playlists: 1 }
+      }});
+    },
+    searchSuggest: function () {
+      return Promise.resolve({ ok: true, data: {
+        songs: [TRACK], albums: [], artists: [], playlists: []
+      }});
+    },
+    searchDefaultKeyword: function () { return Promise.resolve({ ok: true, data: '🔥自由的你' }); },
+    songUrl: function (id) { return Promise.resolve({ ok: true, data: { url: 'https://example.test/' + id + '.mp3', level: 'standard' } }); },
+    unblock: function () { return Promise.resolve({ ok: false, code: 'KUMONE_UNBLOCK_FAILED' }); }
+  };
+  Object.keys(overrides || {}).forEach(function (k) { base[k] = overrides[k]; });
+  return base;
+}
+
+function findRef(tree, role, name) {
+  var re = new RegExp(role + ' "' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '" \\[ref=(@\\d+)');
+  var m = tree.match(re);
+  return m ? m[1] : null;
+}
+
+var frame = document.getElementById('app');
+frame.addEventListener('load', function () { setTimeout(run, 800); });
+
+async function run() {
+  try {
+    var W = frame.contentWindow;
+    var M = W.Mobile;
+    var doc = W.document;
+
+    M.service = fakeService();
+    M.actions.refreshAccount();
+    await wait(200);
+
+    /* ------------------------------- 1. 广播页 */
+
+    M.goTab('fm');
+    await wait(600);
+
+    ok('进入广播页', M.state.view.type === 'fm', M.state.view.type);
+    ok('广播页有当前曲目', /广播曲目/.test(doc.getElementById('m-view').textContent));
+    ok('广播页有「下一首」', !!findRef(M.snapshot().tree, 'button', '下一首'));
+    ok('广播页有「不喜欢这首」', !!findRef(M.snapshot().tree, 'button', '不喜欢这首'));
+
+    // 下一首：重新取一批
+    var nextRef = findRef(M.snapshot().tree, 'button', '下一首');
+    var r1 = M.act(nextRef, 'click');
+    ok('点「下一首」有回执', r1.ok === true, JSON.stringify(r1));
+    await wait(500);
+    ok('「下一首」之后仍有内容', /广播曲目/.test(doc.getElementById('m-view').textContent));
+
+    // 不喜欢：调 fmTrash
+    var trashed = false;
+    var svc = M.service;
+    M.service.fmTrash = function () { trashed = true; return Promise.resolve({ ok: true, data: true }); };
+    M.act(findRef(M.snapshot().tree, 'button', '不喜欢这首'), 'click');
+    await wait(500);
+    ok('点「不喜欢」调了 fmTrash', trashed);
+    M.service = svc;
+
+    /* ------------------------------- 2. 搜索页：模型驱动 */
+
+    M.goTab('search');
+    await wait(600);
+
+    ok('进入搜索页', M.state.view.type === 'search', M.state.view.type);
+
+    var snap = M.snapshot();
+    var inputRef = findRef(snap.tree, 'textbox', '搜索关键词');
+    ok('快照里找得到输入框', !!inputRef);
+    ok('快照里找得到「搜索」按钮', !!findRef(snap.tree, 'button', '搜索'));
+    ok('快照里找得到类型切换', !!findRef(snap.tree, 'button', '搜索类型 单曲'));
+
+    if (inputRef) {
+      var fill = M.act(inputRef, 'fill', { text: '周杰伦' });
+      ok('act fill 有回执', fill.ok === true, JSON.stringify(fill));
+      ok('输入框真的写进去了',
+        doc.querySelector('#m-view .m-search-input').value === '周杰伦',
+        doc.querySelector('#m-view .m-search-input').value);
+
+      // 联想应当出现（input 事件驱动）
+      await wait(700);
+      ok('联想有内容', doc.querySelectorAll('#m-view .m-suggest-chip').length > 0,
+        '联想 chip 数 ' + doc.querySelectorAll('#m-view .m-suggest-chip').length);
+
+      // 点「搜索」出结果
+      var searchRef = findRef(M.snapshot().tree, 'button', '搜索');
+      var r2 = M.act(searchRef, 'click');
+      ok('act 点搜索有回执', r2.ok === true, JSON.stringify(r2));
+      await wait(800);
+      ok('搜出了结果', /单曲/.test(doc.getElementById('m-view').textContent),
+        doc.getElementById('m-view').textContent.slice(0, 120));
+      ok('结果里有可播的曲目行', doc.querySelectorAll('#m-view .m-track-btn').length > 0);
+    }
+
+    /* ------------------------------- 3. 白名单仍然是硬的 */
+
+    var badAction = M.act(findRef(M.snapshot().tree, 'button', '搜索'), 'explode');
+    ok('白名单外的动作 → KUMONE_UNSUPPORTED', badAction.code === 'KUMONE_UNSUPPORTED',
+      String(badAction.code));
+    ok('白名单外的动作，消息里列出了可用动作',
+      /click/.test(badAction.message || '') && /fill/.test(badAction.message || ''),
+      (badAction.message || '').slice(0, 200));
+
+    var notFillable = M.act(findRef(M.snapshot().tree, 'button', '搜索'), 'fill', { text: 'x' });
+    ok('对不可填写的元素 fill → KUMONE_UNSUPPORTED', notFillable.code === 'KUMONE_UNSUPPORTED',
+      String(notFillable.code));
+    ok('fill 失败的消息里也列出了可用动作',
+      /可用动作/.test(notFillable.message || '') && /click/.test(notFillable.message || ''),
+      (notFillable.message || '').slice(0, 200));
+
+    finish();
+  } catch (e) {
+    failures.push('异常：' + (e && e.message ? e.message : String(e)));
+    finish();
+  }
+}
+</script>
+</body>
+</html>

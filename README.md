@@ -16,13 +16,13 @@
 |---|---|---|
 | 人读像素 | 屏幕 | ego 视觉语言：白底 + 黑描边 + 角色色，无毛玻璃、无品牌红 |
 | 模型读语义 | `Mobile.snapshot()` | 输出带稳定 ref 的无障碍文本树（`role "name" [ref=@N, current]`），观察是**只读**的 |
-| 模型动手 | `Mobile.act(ref, action)` | 动作白名单 click / scroll / focus；过期 ref → `KUMONE_STALE_REF`，未知动作 → `KUMONE_UNSUPPORTED` |
+| 模型动手 | `Mobile.act(ref, action)` | 动作白名单 click / scroll / focus / fill；过期 ref → `KUMONE_STALE_REF`，未知动作 → `KUMONE_UNSUPPORTED` |
 
 - 需求与设计决策：`CONTEXT.md`（术语）、`docs/adr/`（架构决策，其中 `0003` 是 ego + 双模态基线）
 - 视觉理论出处：`docs/ego-lite-UI设计理论.md`
 - 验收相关：`docs/验收清单.md`（真机逐条勾）、`docs/已知问题.md`（未通过项都记在这，不悄悄跳过）
 - 规格与任务：`.scratch/apple-music-ui/`（spec + 带阻塞关系的 ticket）
-- 现状：外壳（底部导航 / 吸顶大标题 / 迷你播放条）、设计令牌、语义快照与动作层、错误契约、知识包、**主页五区块（真实数据）**、**歌单 / 歌手 / 专辑详情页**、**扫码登录闭环**、**资料库（五入口 + 账号区）**、**全屏播放页（封面 / 进度 / 音质 / 音量 / 队列）**均已就位；真机验收仍在推进中
+- 现状：外壳（底部导航 / 吸顶大标题 / 迷你播放条）、设计令牌、语义快照与动作层、错误契约、知识包、**主页五区块（真实数据）**、**歌单 / 歌手 / 专辑详情页**、**扫码登录闭环**、**资料库（五入口 + 账号区）**、**全屏播放页（封面 / 进度 / 音质 / 音量 / 队列）**、**广播（私人 FM）与搜索**均已就位；真机验收仍在推进中
 
 ---
 
@@ -199,9 +199,12 @@ cd android
 | `npm run test:library` | 资料库：未登录拉起扫码、五入口与 ref、二级列表、账号区与退出登录 |
 | `npm run test:nowplaying` | 全屏播放页：全屏隐藏、进度 seek、播放控制、音量音质、队列、收起、空状态 |
 | `npm run test:model-flow` | 模型序列：快照 → 进资料库 → 点喜欢的音乐 → 真的开始播放（只用 snapshot + act） |
+| `npm run test:fm-search` | 广播与搜索的服务层：FM 归一化 / 不喜欢 / 四类搜索 / 联想 / 默认词 / 错误翻译 |
+| `npm run test:fm-search:view` | 广播与搜索的界面：FM 两个动作、搜索能被模型 `fill` 驱动、白名单仍是硬的 |
 | `npm run test:try` | 试用台按钮全部点得通（模型层 / 知识包 / 真实数据） |
 | `npm run test:live:data` | 浏览器里走通「服务层 → 内核 → 网易云真实接口」 |
 | `npm run test:guard:prove` | **反向自证**：往代码里注入违规写法，确认守卫会失败，然后自动还原 |
+| `npm run test:actions:prove` | **反向自证**：让知识包声明的动作白名单与实现漂移，确认校验器会失败，然后自动还原 |
 | `npm run fix:bom` | 去掉被 PowerShell 写入的 BOM（PS 5.1 的 `Set-Content -Encoding UTF8` 会加 BOM，JSON 会被它弄坏；`.ps1` 相反，必须带 BOM） |
 | `npm run fix:ps1-bom` | 给 `.ps1` 加 UTF-8 BOM（PS 5.1 读无 BOM 的脚本会把中文当 GBK 解析 → 语法报错） |
 | `npm run check:encoding` | 编码体检：`.json/.js/.md` 必须无 BOM，`.ps1` 必须有 BOM |

@@ -6,7 +6,7 @@
 
 ## 现状与缺口
 
-- 感知层与动作层**已经就位**：`www/mobile/core/snapshot.js` 实现了 ref 分配与复用（`refFor`，`:28-36`）、ref 解析与过期判定（`resolve`，`:39-53`，报 `KUMONE_STALE_REF`）、语义抽取与折叠（`extract`，`:131-169`）、动作白名单 `click` / `scroll` / `focus`（`ACTIONS`，`:221-229`）、动作执行（`act`，`:235-261`，白名单外报 `KUMONE_UNSUPPORTED`）。入口 `www/index.html:35` 已加载它。
+- 感知层与动作层**已经就位**：`www/mobile/core/snapshot.js` 实现了 ref 分配与复用（`refFor`，`:28-36`）、ref 解析与过期判定（`resolve`，`:39-53`，报 `KUMONE_STALE_REF`）、语义抽取与折叠（`extract`，`:131-169`）、动作白名单 `click` / `scroll` / `focus` / `fill`（`ACTIONS`，`:221-229`）、动作执行（`act`，`:235-261`，白名单外报 `KUMONE_UNSUPPORTED`）。入口 `www/index.html:35` 已加载它。
 - **只读已经是真的**：`refFor` 用 `WeakMap`（`:21`）保存 element → ref，**不往 DOM 写任何东西**（`:26` 的注释明确写了这一点）；快照根从 `#m-app` 改成 `document.body`（`:195`），否则模型看不到挂在 body 上的底部导航与迷你播放条；`live` 映射在每次快照时清理已卸载节点（`:211`）。已有只读回归测试 `test/snapshot-readonly.mjs`，动作层回归测试 `test/model-actions.mjs`，两者都已接入 `npm run test:readonly` / `npm run test:model`。
 - 预览侧已经能读到这棵树：`.scratch/apple-music-ui/preview-harness.html:36-38` 在 iframe 里调 `M.snapshot()` 并把 `snap.tree` 渲染到右侧面板。
 - **具体缺口一**：**核心层没有 locator API**。role + name 的匹配实现放在知识包 `www/mobile/learnings/netease/tools/locator.js`（`parseTree` `:104-140`、`findMatches` `:200-213`、`candidateNames` `:216-226`），也就是说**稳定定位只在「加载了知识包」时可用**；`Mobile.snapshot()` / `Mobile.act()` 本身仍只认 ref。ADR-0003 §2 规定的「快照 ref > 语义 locator > 裸 CSS」三层优先级，模型侧目前只用到第一层。
@@ -21,7 +21,7 @@
 - 让同一元素在同一视图内重复快照时 ref 保持不变（由 `WeakMap` + `test/snapshot-readonly.mjs` 保障，不得回退）。
 - 让**核心层**暴露一层稳定 locator：支持按 role + name 定位（例如 `loc=role=button[name="资料库"]`），使视图重建后语义上同一个元素能重新解析到等价目标。知识包 `www/mobile/learnings/netease/tools/locator.js` 已有的匹配能力（`parseTree` / `findMatches` / `candidateNames`）应被提升到核心层或由核心层复用，**不允许知识包与核心层各写一套**。
 - 让 locator 的解析优先级高于裸 CSS 选择器；坐标是最后手段，本轮不提供坐标定位。
-- 让 `Mobile.act(ref, action, args)` 的动作严格受白名单约束，当前白名单为 `click` / `scroll` / `focus`（`snapshot.js:221-229`）；白名单外的动作必须返回 `KUMONE_UNSUPPORTED` 并在 `cause` 里列出可用动作，**不得静默忽略**。
+- 让 `Mobile.act(ref, action, args)` 的动作严格受白名单约束，当前白名单为 `click` / `scroll` / `focus` / `fill`（`snapshot.js:221-229`）；白名单外的动作必须返回 `KUMONE_UNSUPPORTED` 并在 `cause` 里列出可用动作，**不得静默忽略**。
 - 让观察保持只读：`snapshot()` 不改变播放状态、不发请求、不改焦点、**不写 DOM**；维持 `test/snapshot-readonly.mjs` 为回归闸，并把「不写 DOM」纳入断言。
 - 让降噪遵守红线：可折叠结构（无名空容器删除、单子节点容器用子节点替换自身），但**永远不许删改非空页面文本**（`snapshot.js:128-129`）。
 - 让「按码分支」成为硬规则：调用方一律按 `err.code` / `err.kind` 分支，禁止按消息文案分支。
@@ -43,7 +43,7 @@
 - [ ] 切到资料库页后执行 `Mobile.snapshot()`，确认 tree 首行变成 `[view "library" | refs live]`，且「播放列表」「喜欢的音乐」「云盘」「最近播放」「听歌排行」五个节点各带 name 与 ref。
 - [ ] 用上一步得到的 ref 执行 `Mobile.act("@N", "click")`，确认返回 `{ ok: true, action: 'click', ref: '@N', role: ..., name: ... }`，且界面发生了对应变化。
 - [ ] 切走视图使原元素被卸载，再执行 `Mobile.act("@N", "click")`，确认返回 `ok: false`、`code === 'KUMONE_STALE_REF'`、`kind === 'permanent'`，且 message 的 `Next` 段给出「重新取一次快照」。
-- [ ] 执行 `Mobile.act("@N", "swipe")`，确认返回 `ok: false`、`code === 'KUMONE_UNSUPPORTED'`，且 message 的 `Blocked by` 段列出 `click / scroll / focus`。
+- [ ] 执行 `Mobile.act("@N", "swipe")`，确认返回 `ok: false`、`code === 'KUMONE_UNSUPPORTED'`，且 message 的 `Blocked by` 段列出 `click / scroll / focus / fill`。
 - [ ] 用 role + name 的稳定 locator 定位「资料库」导航项并点击，确认无需记住上一次的 ref 也能命中同一元素；**且该 locator 由核心层提供，不要求额外加载知识包**。
 - [ ] 切换一次视图（触发 `M.render()` 重建）后，再用同一 locator 重新命中「资料库」，确认仍能命中 —— 这条是「ref 会断但 locator 不断」的直接证据。
 - [ ] 执行 `Mobile.snapshot()` 前后各读一次播放状态，确认两次读数**完全一致**；调用期间 Network 面板**无新增请求**；`document.activeElement` 未改变；**DOM 未被写入**（不产生 `data-mref` 之类的标记属性）。

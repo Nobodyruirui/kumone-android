@@ -209,6 +209,76 @@
       };
     }
 
+    /* ------------------------------------------------------- 广播 / 搜索 */
+
+    /** 私人广播（FM）。内核返回的是旧版字段，归一化层已经兼容。 */
+    async function personalFM() {
+      var r = await call('personalFM', {});
+      if (!r.ok) return r;
+      return { ok: true, data: nz.normalizeTracks(r.data) };
+    }
+
+    /** 不喜欢：把这首从 FM 里扔掉。 */
+    async function fmTrash(id) {
+      return call('fmTrash', { id: id });
+    }
+
+    /**
+     * 搜索。
+     * @param {string} keywords 关键词
+     * @param {number} type 1 单曲 / 10 专辑 / 100 歌手 / 1000 歌单
+     * @param {number} [limit]
+     * @param {number} [offset]
+     */
+    async function search(keywords, type, limit, offset) {
+      var r = await call('search', {
+        keywords: keywords,
+        type: type,
+        limit: limit || 30,
+        offset: offset || 0
+      });
+      if (!r.ok) return r;
+      var body = r.data || {};
+      return {
+        ok: true,
+        data: {
+          songs: nz.normalizeTracks(body.songs),
+          albums: nz.normalizeAlbums(body.albums),
+          artists: nz.normalizeArtists(body.artists),
+          playlists: nz.normalizePlaylists(body.playlists),
+          counts: {
+            songs: body.songCount || 0,
+            albums: body.albumCount || 0,
+            artists: body.artistCount || 0,
+            playlists: body.playlistCount || 0
+          }
+        }
+      };
+    }
+
+    /** 搜索联想：单曲 / 专辑 / 歌手 / 歌单各给几条。 */
+    async function searchSuggest(keywords) {
+      var r = await call('searchSuggest', { keywords: keywords });
+      if (!r.ok) return r;
+      var body = r.data || {};
+      return {
+        ok: true,
+        data: {
+          songs: nz.normalizeTracks(body.songs),
+          albums: nz.normalizeAlbums(body.albums),
+          artists: nz.normalizeArtists(body.artists),
+          playlists: nz.normalizePlaylists(body.playlists)
+        }
+      };
+    }
+
+    /** 默认搜索词（大家都在搜）。 */
+    async function searchDefaultKeyword() {
+      var r = await call('searchDefaultKeyword', {});
+      if (!r.ok) return r;
+      return { ok: true, data: r.data || null };
+    }
+
     /* --------------------------------------------------------- 详情 */
 
     /** 歌单详情（歌单本体 + 前若干首）。 */
@@ -304,6 +374,11 @@
       likedSongs: likedSongs,
       cloudSongs: cloudSongs,
       playRecords: playRecords,
+      personalFM: personalFM,
+      fmTrash: fmTrash,
+      search: search,
+      searchSuggest: searchSuggest,
+      searchDefaultKeyword: searchDefaultKeyword,
       playlistDetail: playlistDetail,
       artist: artist,
       album: album,

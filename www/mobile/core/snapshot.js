@@ -225,7 +225,22 @@
       var top = (args && args.top) || 0;
       target.scrollTop = top;
     },
-    focus: function (el) { el.focus(); }
+    focus: function (el) { el.focus(); },
+    // 往可填写元素里写字。搜索页要能被模型驱动，没有它就只剩「点」这一种动作。
+    fill: function (el, args) {
+      var tag = (el.tagName || '').toUpperCase();
+      var inputType = (el.getAttribute && el.getAttribute('type') || 'text').toLowerCase();
+      var editable = tag === 'TEXTAREA' || el.isContentEditable === true ||
+        (tag === 'INPUT' && ['text', 'search', 'email', 'url', 'tel', 'password', 'number'].indexOf(inputType) >= 0);
+      if (!editable) {
+        // 注意：<button> 也有 value 属性，不能拿 'value' in el 当判据
+        throw new Error('这个元素不是可填写的输入框');
+      }
+      el.value = (args && args.text != null) ? String(args.text) : '';
+      // 触发 input/change，界面上的联想与结果才会跟着更新
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+    }
   };
 
   /**
@@ -253,7 +268,7 @@
       return M.errors.make('KUMONE_UNSUPPORTED', {
         expected: 'Mobile.act("' + id + '", "' + action + '")',
         state: '动作执行失败',
-        cause: e.message || String(e),
+        cause: (e.message || String(e)) + '；可用动作：' + Object.keys(ACTIONS).join(' / '),
         next: '重新取快照确认元素状态'
       });
     }
