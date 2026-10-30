@@ -16,7 +16,7 @@
 // 退出码：0 通过；1 不通过；无浏览器时 0（SKIP）。
 
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 

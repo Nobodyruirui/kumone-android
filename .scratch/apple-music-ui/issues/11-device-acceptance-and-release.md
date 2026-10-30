@@ -75,9 +75,10 @@
 | 模型序列（快照 → act → 进资料库 → 播放） | ✅ 通过（`npm run test:model-flow` + ego-lite 实跑） |
 | **ego-lite 同源浏览器验收（390×844 @2x，真实数据）** | ✅ 通过 —— 视觉 8 项 + 视觉细节 5 项 + 交互 8 项 + 错误 4 项 + 模型 6 项，逐条结果见 `docs/验收清单.md` §0.5 |
 | 人工验收清单已交付 | ✅ `docs/验收清单.md` |
-| 已知问题已逐条登记 | ✅ `docs/已知问题.md`（12 条） |
-| 真机安装与闭环验收 | ⬜ 待真机（需要 APK + 设备） |
-| 版本标签与可下载 APK | ⬜ 待授权 |
+| 已知问题已逐条登记 | ✅ `docs/已知问题.md`（14 条） |
+| **APK 已构建出来** | ✅ `com.kumone.music`，4.21MB，minSdk 23 / targetSdk 35（`android/app/build/outputs/apk/debug/app-debug.apk`）；构建要点见 README「本地构建」 |
+| 真机安装与闭环验收 | ⬜ 待真机（APK 有了，缺一台手机） |
+| 版本标签与公开 Release | ⬜ 待授权 |
 
 ### ego-lite 能验什么、不能验什么
 

@@ -14,3 +14,7 @@ Thumbs.db
 
 # Test artifacts
 test/tmp/
+
+# 本机构包产物（不入库）
+*.apk
+*.aab

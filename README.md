@@ -169,13 +169,35 @@ npm run try
 
 ## 本地构建（可选，需要 Android 环境）
 
+> **JDK 版本必须是 21**（Capacitor 7 的 `capacitor-android` 模块按 Java 21 编译，
+> 用 17 会报「无效的目标发行版: 21」）。AGP 8.7.2 + Gradle 8.11.1 + compileSdk 35。
+
 ```bash
 npm install
-npx cap sync android                 # 把 www 同步进 android 工程
+npx cap copy android                 # 把 www/ 复制进安卓工程（改完前端只要跑这条）
 cd android
 ./gradlew assembleDebug              # 输出 app/build/outputs/apk/debug/app-debug.apk
 ```
-或用 Android Studio 打开 `android/` 目录，选 `app` 运行到模拟器 / 真机。
+
+Windows 上还需要：
+
+| 项 | 要求 |
+|---|---|
+| Android SDK | `compileSdk 35` + `build-tools 35.0.0`（本机在 `D:\Android\Sdk`） |
+| `android/local.properties` | 写 `sdk.dir=D\:\\Android\\Sdk`（不入库） |
+| `JAVA_HOME` | 指向 **JDK 21**（本机用的是 `C:\Users\17825\.local\jdk21\jdk-21.0.13+9`） |
+| 仓库路径含中文 | `android/gradle.properties` 需要 `android.overridePathCheck=true`，否则 AGP 直接拒绝构建 |
+
+PowerShell 里构建：
+
+```powershell
+$env:JAVA_HOME = "C:\Users\17825\.local\jdk21\jdk-21.0.13+9"
+$env:PATH = "$env:JAVA_HOME\bin;$env:PATH"
+.\android\gradlew.bat -p ".\android" assembleDebug --console=plain
+```
+
+装到手机上：用 adb `adb install -r <apk 路径>`，或者把 APK 传到手机直接点开安装
+（需要允许「安装未知来源」）。debug 包用 Android 自带的 debug keystore 签名，可直接装。
 
 ---
 
