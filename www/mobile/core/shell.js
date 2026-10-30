@@ -205,6 +205,11 @@
       b.appendChild(el('span', { class: 'm-account-dot', 'aria-hidden': 'true' }));
     }
     b.appendChild(el('span', { class: 'm-account-name' }, who));
+    // VIP 标识：登录后要能一眼看出 VIP 权限有没有生效
+    // （VIP 直接决定无损 / Hi-Res 能不能真放出来）
+    if (account.vipType > 0) {
+      b.appendChild(el('span', { class: 'm-account-vip', 'aria-label': 'VIP 会员' }, 'VIP'));
+    }
     b.addEventListener('click', function () {
       if (M.actions && M.actions.confirmLogout) M.actions.confirmLogout();
     });

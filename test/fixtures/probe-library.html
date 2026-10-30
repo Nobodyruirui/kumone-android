@@ -42,7 +42,7 @@ var TRACK = {
   artists: [{ id: 1, name: '甲' }], album: { id: 2, name: '专辑', picUrl: '' }
 };
 var PLAYLIST = { id: 22, name: '我的歌单一', cover: '', creator: { nickname: '我' }, playCount: 10, trackCount: 3 };
-var ACCOUNT = { userId: 77, nickname: '测试昵称', avatarUrl: '', vipType: 0 };
+var ACCOUNT = { userId: 77, nickname: '测试昵称', avatarUrl: '', vipType: 1 };
 
 function fakeService(overrides) {
   var calls = [];
@@ -201,6 +201,7 @@ async function run() {
     ok('账号入口显示昵称', accBtn && accBtn.textContent.indexOf('测试昵称') >= 0,
       accBtn ? accBtn.textContent : '（无）');
 
+    ok('VIP badge', !!(doc.querySelector('#m-account .m-account-vip')));
     if (accBtn) {
       accBtn.click();
       await wait(150);

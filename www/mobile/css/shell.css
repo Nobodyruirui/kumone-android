@@ -1109,3 +1109,15 @@ body.m-focus #m-main { padding-bottom: 24px; }
   font-style: italic;
   color: var(--ink-2);
 }
+
+/* 顶栏账号区的 VIP 标识 */
+.m-account-vip {
+  flex-shrink: 0;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  color: var(--ink);
+  background: var(--role-curated);
+  border-radius: var(--radius-pill);
+  padding: 2px 5px;
+}
