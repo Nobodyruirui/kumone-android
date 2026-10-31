@@ -54,6 +54,19 @@
     var err = opts.errors || errors;
     var nz = opts.normalize || normalize;
 
+    /**
+     * 歌词文本规整：接口给的是 `{ version, lyric }` 对象，
+     * 这里统一取出**字符串**；已经是字符串就原样返回。
+     */
+    function lyricText(raw) {
+      if (!raw) return null;
+      if (typeof raw === 'string') return raw.trim() ? raw : null;
+      if (typeof raw === 'object' && typeof raw.lyric === 'string') {
+        return raw.lyric.trim() ? raw.lyric : null;
+      }
+      return null;
+    }
+
     if (!facade || typeof facade.invoke !== 'function') {
       throw new Error('服务层需要一个带 invoke(channel, args) 的内核门面');
     }
@@ -105,7 +118,132 @@
       return call('logout', {});
     }
 
+    /* --------------------------------------------------------- 我的内容 */
+
+    /**
+     * 新建歌单。
+     * @param {string} name 歌单名
+     */
+    async function createPlaylist(name) {
+      var n = String(name == null ? '' : name).trim();
+      if (!n) {
+        return err.make('KUMONE_EMPTY_RESULT', {
+          expected: 'await createPlaylist(name)',
+          state: '歌单名是空的',
+          cause: '没有填名字',
+          next: '给歌单起个名字再新建'
+        });
+      }
+      var r = await call('createPlaylist', { name: n });
+      if (!r.ok) return r;
+      var body = r.data || {};
+      var pl = body.playlist || body;
+      return {
+        ok: true,
+        data: {
+          id: pl.id || body.id || 0,
+          name: pl.name || n,
+          cover: nz.imageUrl(pl.picUrl || pl.coverImgUrl)
+        }
+      };
+    }
+
+    /**
+     * 把歌加进歌单。
+     * @param {number} playlistId 歌单 id
+     * @param {Array<number>} trackIds 曲目 id
+     */
+    async function addToPlaylist(playlistId, trackIds) {
+      var ids = (trackIds || []).filter(function (x) { return !!x; });
+      if (!playlistId || !ids.length) {
+        return err.make('KUMONE_EMPTY_RESULT', {
+          expected: 'await addToPlaylist(playlistId, trackIds)',
+          state: '歌单或曲目是空的',
+          cause: '没有要加入的内容',
+          next: '选一个歌单再加'
+        });
+      }
+      var r = await call('playlistTracks', {
+        op: 'add',
+        playlistID: playlistId,
+        trackIDs: ids
+      });
+      if (!r.ok) return r;
+      return { ok: true, data: { playlistId: playlistId, added: ids.length } };
+    }
+
+    /** 收藏 / 取消收藏专辑。 */
+    async function subscribeAlbum(id, subscribe) {
+      if (!id) {
+        return err.make('KUMONE_NOT_FOUND', {
+          expected: 'await subscribeAlbum(id, subscribe)',
+          state: '没有专辑 id',
+          cause: 'id 是空的',
+          next: '换一个专辑再试'
+        });
+      }
+      var r = await call('subscribeAlbum', { id: id, subscribe: !!subscribe });
+      if (!r.ok) return r;
+      return { ok: true, data: { subscribed: !!subscribe } };
+    }
+
+    /** 收藏的专辑列表。 */
+    async function likedAlbums() {
+      var r = await call('likedAlbums', {});
+      if (!r.ok) return r;
+      return { ok: true, data: nz.normalizeAlbums(r.data || []) };
+    }
+
     /* --------------------------------------------------------- 扫码登录 */
+    /**
+     * 手机号 + 密码登录。
+     *
+     * 密码**只在这一次请求里出现**：不写 localStorage、不写日志、不进错误消息。
+     * 编码方式（明文 / MD5）由内核自己试，界面层不需要知道。
+     *
+     * @param {string} phone 手机号
+     * @param {string} password 密码
+     * @returns {Promise<object>} { ok:true, data:{loggedIn:true} } 或契约错误
+     */
+    async function loginByPassword(phone, password) {
+      var p = String(phone == null ? '' : phone).trim();
+      var pw = String(password == null ? '' : password);
+      if (!p) {
+        return err.make('KUMONE_LOGIN_FAILED', {
+          expected: 'await loginByPassword(phone, password)',
+          state: '手机号是空的',
+          cause: '没有填手机号',
+          next: '填手机号与密码后再试'
+        });
+      }
+      if (!pw) {
+        return err.make('KUMONE_LOGIN_FAILED', {
+          expected: 'await loginByPassword(phone, password)',
+          state: '密码是空的',
+          cause: '没有填密码',
+          next: '填手机号与密码后再试'
+        });
+      }
+
+      var r = await call('cellphoneLogin', { phone: p, password: pw });
+      if (!r.ok) return r;
+
+      var body = r.data || {};
+      if (Number(body.code) === 200) {
+        return { ok: true, data: { loggedIn: true } };
+      }
+
+      // 502 = 账号或密码不对；其它码按服务端给的说法透出
+      var msg = body.message || body.msg || '账号或密码错误';
+      return err.make('KUMONE_LOGIN_FAILED', {
+        expected: 'await loginByPassword(phone, password)',
+        state: '网易云返回 code=' + (body.code == null ? '未知' : body.code),
+        cause: msg,
+        next: Number(body.code) === 502
+          ? '核对手机号与密码后重试'
+          : '按上面的提示处理；必要时改用扫码登录'
+      });
+    }
 
     /** 取二维码的 unikey（有效期约 3 分钟）。 */
     async function qrKey() {
@@ -281,14 +419,41 @@
 
     /* --------------------------------------------------------- 详情 */
 
-    /** 歌单详情（歌单本体 + 前若干首）。 */
+    /**
+     * 歌单详情（歌单本体 + 曲目）。
+     *
+     * 取歌位置踩过坑：网易云 v6 接口的响应是
+     *   { code, playlist: { tracks: [...], trackIds: [...], trackCount }, privileges }
+     * —— **顶层没有 tracks / songs**，曲目在 `playlist.tracks` 里。
+     * 早先从顶层取，导致**所有歌单与排行榜详情都是空的**。
+     */
     async function playlistDetail(id) {
       var r = await call('playlistDetail', { id: id });
       if (!r.ok) return r;
       var body = r.data || {};
-      var pl = nz.normalizePlaylist(body.playlist || body);
-      var tracks = nz.normalizeTracks(body.songs || body.tracks || []);
-      return { ok: true, data: { playlist: pl, tracks: tracks } };
+      var raw = body.playlist || body;
+      var tracks = nz.normalizeTracks(raw.tracks || body.tracks || body.songs || []);
+      var ids = (raw.trackIds || []).map(function (x) { return x && x.id; })
+        .filter(function (x) { return !!x; });
+      return {
+        ok: true,
+        data: {
+          playlist: nz.normalizePlaylist(raw),
+          tracks: tracks,
+          trackIds: ids,
+          total: raw.trackCount || tracks.length
+        }
+      };
+    }
+
+    /** 按 id 批量取曲目详情（列表「加载更多」用）。 */
+    async function songDetails(ids) {
+      var list = (ids || []).filter(function (x) { return !!x; });
+      if (!list.length) return { ok: true, data: [] };
+      var r = await call('songDetails', { ids: list });
+      if (!r.ok) return r;
+      var body = r.data || {};
+      return { ok: true, data: nz.normalizeTracks(body.songs || []) };
     }
 
     /** 歌手详情。 */
@@ -328,12 +493,32 @@
       return { ok: true, data: nz.normalizeSongUrl(r.data) };
     }
 
-    /** 歌词。 */
+    /**
+     * 歌词。
+     * 三种文本各有各的用处：
+     *   lrc    整行歌词（老的歌基本都有）
+     *   tlyric 翻译行（对应 lrc）
+     *   yrc    逐字歌词（新歌才有，词级时间）
+     *
+     * **坑**：接口返回的 lrc / tlyric 是**对象** `{ version, lyric }`，
+     * 不是字符串。直接把它当字符串用，`String(obj)` 会变成 "[object Object]"，
+     * 于是**整行歌词的歌全部显示「暂无歌词」**（只有逐字的能显示，
+     * 因为逐字那层取的是 `.lyric` 字段）。
+     *
+     * @param {number} id 曲目 id
+     */
     async function lyric(id) {
       var r = await call('lyric', { id: id });
       if (!r.ok) return r;
       var body = r.data || {};
-      return { ok: true, data: { lrc: body.lrc || null, tlyric: body.tlyric || null } };
+      return {
+        ok: true,
+        data: {
+          lrc: lyricText(body.lrc),
+          tlyric: lyricText(body.tlyric),
+          yrc: lyricText(body.yrc)
+        }
+      };
     }
 
     /**
@@ -362,6 +547,11 @@
       isLoggedIn: isLoggedIn,
       account: account,
       logout: logout,
+      loginByPassword: loginByPassword,
+      createPlaylist: createPlaylist,
+      addToPlaylist: addToPlaylist,
+      subscribeAlbum: subscribeAlbum,
+      likedAlbums: likedAlbums,
       qrKey: qrKey,
       qrCheck: qrCheck,
       qrImage: qrImage,
@@ -380,6 +570,7 @@
       searchSuggest: searchSuggest,
       searchDefaultKeyword: searchDefaultKeyword,
       playlistDetail: playlistDetail,
+      songDetails: songDetails,
       artist: artist,
       album: album,
       songUrl: songUrl,

@@ -18,6 +18,7 @@
   var ENTRIES = [
     { key: 'playlists', label: '播放列表', role: 'owned', view: 'myplaylists' },
     { key: 'liked', label: '喜欢的音乐', role: 'owned', view: 'liked' },
+    { key: 'favalbums', label: '收藏的专辑', role: 'owned', view: 'favalbums' },
     { key: 'cloud', label: '云盘', role: 'neutral', view: 'cloud' },
     { key: 'recent', label: '最近播放', role: 'auto', view: 'recent' },
     { key: 'records', label: '听歌排行', role: 'curated', view: 'records' }
@@ -41,6 +42,12 @@
         if (!l.ok) return { text: l.title || '加载失败', err: l };
         var ln = (l.data || []).length;
         return { text: ln ? ln + ' 首红心' : '还没有红心' };
+      }
+      if (entry.key === 'favalbums') {
+        var f = await M.service.likedAlbums();
+        if (!f.ok) return { text: f.title || '加载失败', err: f };
+        var fn = (f.data || []).length;
+        return { text: fn ? fn + ' 张专辑' : '还没有收藏专辑' };
       }
       if (entry.key === 'cloud') {
         var c = await M.service.cloudSongs();

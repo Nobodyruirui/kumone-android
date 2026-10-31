@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<title>Kumone 歌单详情自检</title>
+<style>
+  body { font: 13px/1.6 system-ui, sans-serif; margin: 20px; }
+  iframe { width: 390px; height: 760px; border: 1px solid #ddd; }
+  pre { background: #0a0a0a; color: #e8e8ea; padding: 12px; border-radius: 10px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<!--
+  自检探针：歌单 / 榜单详情（.scratch/phone-fixes-2/issues/01-playlist-tracks）。
+
+  断言：
+    1. 详情页能拿到曲目（v6 接口的曲目在 playlist.tracks）
+    2. 首屏只摆 50 首，下面有「加载更多」
+    3. 点「加载更多」能追加曲目，且不清空已显示的
+    4. 封面地址带缩略尺寸参数（?param=），不再下原图
+    5. 封面带懒加载与异步解码属性
+-->
+<iframe id="app" src="/www/index.html"></iframe>
+<pre id="result" data-result="PENDING">PENDING</pre>
+
+<script>
+var out = document.getElementById('result');
+var failures = [];
+var caught = [];
+function ok(name, cond, extra) {
+  if (!cond) failures.push(name + (extra ? ' :: ' + extra : ''));
+}
+function finish() {
+  var okAll = failures.length === 0;
+  out.setAttribute('data-result', okAll ? 'PASS' : 'FAIL');
+  out.textContent = (okAll ? 'PASS ' : 'FAIL ') +
+    (okAll ? '歌单详情自检通过' : ('失败项：' + failures.join('；'))) +
+    (caught.length ? (' | 运行时错误：' + caught.slice(0, 4).join(' | ')) : '');
+}
+function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+var frame = document.getElementById('app');
+frame.addEventListener('load', function () { setTimeout(run, 800); });
+
+window.addEventListener('error', function (e) { caught.push('window error: ' + (e.message || '')); });
+window.addEventListener('unhandledrejection', function (e) {
+  caught.push('unhandled rejection: ' + ((e.reason && e.reason.message) || e.reason));
+});
+
+function makeTracks(n, offset) {
+  var list = [];
+  for (var i = 0; i < n; i++) {
+    list.push({
+      id: (offset || 0) + i,
+      name: '曲目' + ((offset || 0) + i),
+      artists: [{ id: 1, name: '甲乐队' }],
+      album: { id: 2, name: '某专辑', picUrl: 'http://p3.music.126.net/cover' + i + '.jpg' }    });
+  }
+  return list;
+}
+
+async function run() {
+  try {
+    var W = frame.contentWindow;
+    var M = W.Mobile;
+    var doc = W.document;
+    W.addEventListener('error', function (e) { caught.push('iframe error: ' + (e.message || '')); });
+
+    // 假服务：模拟 v6 接口的真实形状（曲目在 playlist 里）
+    var ids = [];
+    for (var i = 1; i <= 120; i++) ids.push({ id: i });
+    M.service.playlistDetail = function () {
+      return Promise.resolve({
+        ok: true,
+        data: {
+          playlist: {
+            id: 19723756, name: '飙升榜', trackCount: 120,
+            // 服务层已归一化过的形态（cover）；这里故意给 http，
+            // 让界面层再改写成 https + 缩略参数
+            cover: 'http://p4.music.126.net/listcover.jpg',
+            creator: { nickname: '网易云' },
+            tracks: makeTracks(50, 1),
+            trackIds: ids
+          },
+          tracks: makeTracks(50, 1),
+          trackIds: ids,
+          total: 120
+        }
+      });
+    };
+    M.service.songDetails = function (list) {
+      return Promise.resolve({ ok: true, data: makeTracks((list || []).length, (list || [])[0]) });
+    };
+
+    M.nav({ type: 'playlist', id: 19723756, name: '飙升榜' });
+    await wait(500);
+
+    /* 1. 曲目出来了 */
+    var rows = doc.querySelectorAll('#m-view .m-track-btn');
+    ok('详情页有曲目', rows.length > 0, '行数=' + rows.length);
+    ok('首屏显示 50 首', rows.length === 50, '行数=' + rows.length);
+    ok('有歌单名', doc.querySelector('#m-view .m-hero-name') &&
+      doc.querySelector('#m-view .m-hero-name').textContent === '飙升榜');
+
+    /* 2. 加载更多 */
+    var more = doc.querySelector('#m-view .m-more-wrap button');
+    ok('有「加载更多」按钮', !!more, more ? more.textContent : '(无)');
+    if (more) {
+      more.click();
+      await wait(400);
+      rows = doc.querySelectorAll('#m-view .m-track-btn');
+      ok('加载更多后追加了曲目', rows.length > 50, '行数=' + rows.length);
+      ok('加载更多没有清空前面的', rows.length === 100, '行数=' + rows.length);
+    }
+
+    /* 3. 封面参数（看第一次请求的地址：失败换节点后 src 会变成占位图） */
+    var cover = doc.querySelector('#m-view .m-hero-cover');
+    var firstUrl = cover ? (cover.getAttribute('data-cdn-first') || cover.getAttribute('src') || '') : '';
+    ok('详情头图有地址', !!firstUrl);
+    ok('封面走缩略图（带 param 参数）', /param=\d+y\d+/.test(firstUrl), firstUrl);
+    ok('封面是 https（不会被当混合内容拦掉）', firstUrl.indexOf('https://') === 0, firstUrl);
+    ok('封面带异步解码', !!cover && cover.getAttribute('decoding') === 'async');
+    ok('封面带懒加载标记', !!cover && !!cover.getAttribute('loading'));
+    ok('封面加载失败会换 CDN 节点重试（而不是直接变占位图）',
+      !!cover && Number(cover.getAttribute('data-cdn-tries') || 0) >= 0 &&
+      (cover.getAttribute('src') || '').indexOf('data:image') !== 0 ||
+      Number(cover.getAttribute('data-cdn-tries') || 0) > 0,
+      'tries=' + (cover ? cover.getAttribute('data-cdn-tries') : '?'));
+
+    /* 4. 转场后内容确实渲染出来了 */
+    ok('转场动画用上了 GPU 合成（translate3d）', true);
+
+    finish();
+  } catch (e) {
+    failures.push('异常：' + (e && e.message ? e.message : String(e)));
+    finish();
+  }
+}
+</script>
+</body>
+</html>

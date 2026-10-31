@@ -212,5 +212,6 @@
     client: client,
     decode: function (bufOrText) { return client.decode(bufOrText); },
     USER_AGENT: USER_AGENT,
+    md5hex: function (s) { return ncrypto.md5hex(s); },
   };
 });

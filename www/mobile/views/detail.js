@@ -29,7 +29,9 @@
           ].filter(Boolean)
         };
       },
-      tracks: function (d) { return d.tracks || []; }
+      tracks: function (d) { return d.tracks || []; },
+      // 歌单可以很长：多出来的部分按 id 批量取
+      more: function (d) { return { ids: d.trackIds || [], total: d.total || 0 }; }
     },
     artist: {
       load: function (id) { return M.service.artist(id); },
@@ -69,8 +71,7 @@
 
   function heroCard(hero) {
     var card = ui.el('div', { class: 'm-card m-hero', role: 'group', 'aria-label': hero.name });
-    var img = ui.el('img', { class: 'm-hero-cover', alt: hero.name + ' 封面' });
-    if (hero.cover) img.setAttribute('src', hero.cover);
+    var img = ui.cover({ url: hero.cover, alt: hero.name + ' 封面', className: 'm-hero-cover', size: 400, eager: true });
     card.appendChild(img);
     var info = ui.el('div', { class: 'm-hero-info' });
     info.appendChild(ui.el('div', { class: 'm-hero-name' }, hero.name));
@@ -81,8 +82,54 @@
     return card;
   }
 
-  function build(type, view) {
-    var src = SOURCES[type];
+  /**
+   * 专辑页的「收藏」按钮。
+   * 初始状态靠「收藏的专辑」列表判断 —— 与其猜，不如读一次真相。
+   */
+  function albumFavRow(albumId) {
+    var wrap = ui.el('div', { class: 'm-action-row' });
+    var btn = ui.el('button', {
+      class: 'm-btn',
+      type: 'button',
+      'aria-label': '收藏专辑',
+      'aria-pressed': 'false'
+    }, '收藏专辑');
+    var fav = false;
+
+    function paint() {
+      btn.textContent = fav ? '已收藏' : '收藏专辑';
+      btn.setAttribute('aria-pressed', fav ? 'true' : 'false');
+      btn.classList.toggle('is-on', fav);
+    }
+
+    btn.addEventListener('click', function () {
+      btn.disabled = true;
+      var want = !fav;
+      Promise.resolve(M.service.subscribeAlbum(albumId, want)).then(function (r) {
+        btn.disabled = false;
+        if (!r || r.ok !== true) {
+          if (M.shell) M.shell.toast((r && r.title) || '操作失败');
+          return;
+        }
+        fav = want;
+        paint();
+        if (M.shell) M.shell.toast(fav ? '已收藏专辑' : '已取消收藏');
+      });
+    });
+
+    // 初始状态
+    Promise.resolve(M.service.likedAlbums ? M.service.likedAlbums() : null).then(function (r) {
+      if (!r || r.ok !== true) return;
+      fav = (r.data || []).some(function (a) { return a.id === albumId; });
+      paint();
+    });
+
+    wrap.appendChild(btn);
+    paint();
+    return wrap;
+  }
+
+  function build(type, view) {    var src = SOURCES[type];
     var frag = document.createDocumentFragment();
     var body = ui.el('div', { class: 'm-block-body' });
 
@@ -121,21 +168,79 @@
         var hero = src.hero(r.data || {});
         body.appendChild(heroCard(hero));
 
+        // 专辑页：收藏 / 取消收藏
+        if (type === 'album' && view.id) {
+          body.appendChild(albumFavRow(view.id));
+        }
+
         var tracks = src.tracks(r.data || {});
         if (!tracks.length) {
           body.appendChild(ui.emptyNote('这个列表暂时没有内容'));
           return;
         }
 
+        // 首屏 50 首；歌单更长时给「加载更多」
+        var PAGE = 50;
+        var more = src.more ? src.more(r.data || {}) : null;
+        var pool = tracks.slice();
+        var ids = (more && more.ids) || [];
+        var shown = Math.min(PAGE, pool.length);
+
         var list = ui.el('ul', { class: 'm-list', role: 'list', 'aria-label': '曲目列表' });
-        tracks.forEach(function (t, i) {
-          list.appendChild(ui.trackRow({
-            track: t,
-            index: i,
-            onClick: function () { M.actions.playTracks(tracks, i); }
-          }));
-        });
         body.appendChild(list);
+
+        var moreWrap = ui.el('div', { class: 'm-more-wrap' });
+        body.appendChild(moreWrap);
+
+        function paintList() {
+          list.textContent = '';
+          pool.slice(0, shown).forEach(function (t, i) {
+            list.appendChild(ui.trackRow({
+              track: t,
+              index: i,
+              onClick: function () { M.actions.playTracks(pool.slice(0, shown), i); },
+              onAdd: function (track) { M.actions.addToPlaylist(track); }
+            }));
+          });
+          moreWrap.textContent = '';
+          var hasMore = shown < pool.length || (ids.length > shown);
+          if (!hasMore) return;
+          var btn = ui.button('加载更多', '', function () {
+            btn.disabled = true;
+            btn.textContent = '加载中…';
+            // 先用已经拿到的，没了再按 id 去取
+            var next = pool.slice(shown, shown + PAGE);
+            if (next.length) {
+              pool = pool.concat(next);
+              shown = pool.length;
+              paintList();
+              return;
+            }
+            var need = ids.slice(shown, shown + PAGE);
+            if (!need.length) { paintList(); return; }
+            Promise.resolve(M.service.songDetails ? M.service.songDetails(need) : null)
+              .then(function (r) {
+                if (!r || r.ok !== true) throw r || new Error('加载失败');
+                pool = pool.concat(r.data || []);
+                shown = pool.length;
+                paintList();
+              })
+              .catch(function (e) {
+                btn.disabled = false;
+                btn.textContent = '重试加载';
+                moreWrap.appendChild(ui.errorCard(
+                  M.errors.make('KUMONE_NETWORK', {
+                    expected: 'await service.songDetails(ids)',
+                    state: '加载更多曲目失败',
+                    cause: (e && (e.message || e.code)) || String(e),
+                    next: '点重试再试一次'
+                  }), { onRetry: function () { btn.click(); } }));
+              });
+          });
+          moreWrap.appendChild(btn);
+        }
+
+        paintList();
       }).catch(function (e) {
         if (!body.isConnected) return;
         body.setAttribute('aria-busy', 'false');

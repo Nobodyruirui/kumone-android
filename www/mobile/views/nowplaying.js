@@ -15,6 +15,8 @@
 
   var ui = M.ui;
   var unsubscribe = null;
+  // 歌词扫光的帧循环（离开播放页要停）
+  var lyricRaf = null;
   // 视图是否还活着。
   // 注意：不能用 `body.isConnected` 判断 —— 首次 paint() 是在 render() 里同步调的，
   // 那时片段还没挂进 DOM，isConnected 还是 false，首帧会被静默跳过（界面永远空白）。
@@ -107,8 +109,22 @@
 
       var live = ui.el('div', { class: 'm-np-live', hidden: 'hidden' });
 
-      var cover = ui.el('img', { class: 'm-np-cover', alt: '封面' });
-      live.appendChild(cover);
+      // 舞台：封面与歌词面板叠在一起，点封面切到歌词、再点切回
+      var stage = ui.el('div', { class: 'm-np-stage' });
+
+      var coverBtn = ui.el('button', {
+        class: 'm-np-cover-btn',
+        type: 'button',
+        'aria-label': '查看歌词'
+      });
+      var cover = ui.cover({ url: null, alt: '封面', className: 'm-np-cover', size: 500, eager: true });
+      coverBtn.appendChild(cover);
+      stage.appendChild(coverBtn);
+
+      var lyricPanel = ui.el('div', { class: 'm-lyrics', role: 'region', 'aria-label': '歌词' });
+      stage.appendChild(lyricPanel);
+
+      live.appendChild(stage);
 
       var title = ui.el('div', { class: 'm-np-title' });
       var artist = ui.el('div', { class: 'm-np-artist' });
@@ -174,12 +190,239 @@
         M.nav({ type: 'queue' });
       });
       auxRow.appendChild(queueBtn);
+
+      var lyricBtn = ui.el('button', {
+        class: 'm-btn m-np-lyric-btn',
+        type: 'button',
+        'aria-label': '查看歌词',
+        'aria-pressed': 'false'
+      }, '歌词');
+      lyricBtn.addEventListener('click', function () { toggleLyrics(); });
+      auxRow.appendChild(lyricBtn);
+
+      // 播放模式：顺序 → 单曲循环 → 列表循环 → 随机
+      var REPEAT_LABEL = {
+        off: '顺序',
+        one: '单曲循环',
+        all: '列表循环',
+        shuffle: '随机'
+      };
+      var REPEAT_CYCLE = ['off', 'one', 'all', 'shuffle'];
+      var repeatBtn = ui.el('button', {
+        class: 'm-btn m-np-repeat-btn',
+        type: 'button',
+        'aria-label': '播放模式'
+      }, '顺序');
+      repeatBtn.addEventListener('click', function () {
+        if (!M.player) return;
+        var cur = M.player.state().repeat || 'off';
+        var i = REPEAT_CYCLE.indexOf(cur);
+        var nextMode = REPEAT_CYCLE[(i + 1) % REPEAT_CYCLE.length];
+        M.player.setRepeat(nextMode);
+      });
+      auxRow.appendChild(repeatBtn);
+
+      // 加入歌单：正在听的这一首
+      var addBtn = ui.el('button', {
+        class: 'm-btn',
+        type: 'button',
+        'aria-label': '加入歌单'
+      }, '加入歌单');
+      addBtn.addEventListener('click', function () {
+        var snap = M.player ? M.player.state() : null;
+        if (!snap || !snap.track) {
+          if (M.shell) M.shell.toast('现在没有在放什么');
+          return;
+        }
+        M.actions.addToPlaylist(snap.track);
+      });
+      auxRow.appendChild(addBtn);
+
       live.appendChild(auxRow);
 
       var qualityNote = ui.el('div', { class: 'm-np-quality-note' });
       live.appendChild(qualityNote);
 
       body.appendChild(live);
+
+      /* ------------------------------------------------ 歌词 */
+
+      // 歌词状态：按曲目 id 缓存，切歌才重新取
+      var lyricState = {
+        trackId: null,
+        kind: 'none',
+        lines: [],
+        activeIndex: -1,
+        mode: 'cover',      // cover | lyrics
+        loading: false,
+        error: null
+      };
+      var lyricToken = 0;
+
+      function toggleLyrics() {
+        lyricState.mode = lyricState.mode === 'cover' ? 'lyrics' : 'cover';
+        applyLyricMode();
+      }
+
+      function applyLyricMode() {
+        var on = lyricState.mode === 'lyrics';
+        live.classList.toggle('m-lyrics-mode', on);
+        lyricBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+        lyricBtn.setAttribute('aria-label', on ? '返回封面' : '查看歌词');
+        lyricBtn.textContent = on ? '封面' : '歌词';
+        coverBtn.setAttribute('aria-label', on ? '返回封面' : '查看歌词');
+        if (on) {
+          // 进歌词视图时把当前行滚到中间
+          tickLyrics();
+          scrollToActive(true);
+        }
+      }
+
+      /** 取歌词（同一首歌只取一次）。 */
+      function loadLyrics(trackId) {
+        if (!trackId) {
+          lyricState.trackId = null;
+          lyricState.lines = [];
+          lyricState.kind = 'none';
+          renderLyrics();
+          return;
+        }
+        if (lyricState.trackId === trackId) return;
+        lyricState.trackId = trackId;
+        lyricState.loading = true;
+        lyricState.error = null;
+        lyricState.lines = [];
+        lyricState.kind = 'none';
+        renderLyrics();
+
+        var token = ++lyricToken;
+        Promise.resolve(M.service && M.service.lyric ? M.service.lyric(trackId) : null)
+          .then(function (r) {
+            if (token !== lyricToken || !alive) return;
+            lyricState.loading = false;
+            if (!r || r.ok !== true) {
+              lyricState.error = r || { message: '歌词获取失败' };
+              renderLyrics();
+              return;
+            }
+            var built = M.lyrics.build(r.data || {});
+            lyricState.kind = built.kind;
+            lyricState.lines = built.lines;
+            lyricState.activeIndex = -1;
+            renderLyrics();
+          })
+          .catch(function () {
+            if (token !== lyricToken || !alive) return;
+            lyricState.loading = false;
+            lyricState.error = { message: '歌词获取失败' };
+            renderLyrics();
+          });
+      }
+
+      /** 把歌词画出来。 */
+      function renderLyrics() {
+        lyricPanel.textContent = '';
+
+        if (lyricState.loading) {
+          lyricPanel.appendChild(ui.el('div', { class: 'm-lyrics-note' }, '正在加载歌词…'));
+          return;
+        }
+        if (lyricState.error) {
+          lyricPanel.appendChild(ui.el('div', { class: 'm-lyrics-note' }, '歌词加载失败'));
+          return;
+        }
+        if (!lyricState.lines.length) {
+          lyricPanel.appendChild(ui.el('div', { class: 'm-lyrics-note' }, '暂无歌词'));
+          return;
+        }
+
+        lyricState.lines.forEach(function (ln, i) {
+          var row = ui.el('div', { class: 'm-lyric-line' });
+          row.setAttribute('data-time', String(ln.time));
+          row.setAttribute('data-index', String(i));
+
+          if (ln.words && ln.words.length) {
+            var wrap = ui.el('span', { class: 'm-lyric-words' });
+            ln.words.forEach(function (w) {
+              var s = ui.el('span', { class: 'm-lyric-word' }, w.text);
+              s.setAttribute('data-t', String(w.t));
+              s.setAttribute('data-d', String(w.d));
+              wrap.appendChild(s);
+            });
+            row.appendChild(wrap);
+          } else {
+            row.appendChild(ui.el('span', { class: 'm-lyric-text' }, ln.text));
+          }
+
+          if (ln.translation) {
+            row.appendChild(ui.el('div', { class: 'm-lyric-tr' }, ln.translation));
+          }
+          lyricPanel.appendChild(row);
+        });
+      }
+
+      /** 当前行滚到中间（only when asked）。 */
+      function scrollToActive(force) {
+        if (lyricState.activeIndex < 0) return;
+        var row = lyricPanel.querySelector('.m-lyric-line[data-index="' + lyricState.activeIndex + '"]');
+        if (!row || !row.scrollIntoView) return;
+        try {
+          row.scrollIntoView({ block: 'center', behavior: force ? 'auto' : 'smooth' });
+        } catch (_) {
+          row.scrollIntoView(false);
+        }
+      }
+
+      /**
+       * 每帧刷新歌词：当前行高亮 + 逐字扫光。
+       * 逐字用「行内进度」实现：已唱部分实色、未唱部分压暗。
+       */
+      function tickLyrics() {
+        if (!alive || !M.player) return;
+        // 歌词视图不在屏幕上时不做任何逐帧计算（省电、也不跟转场抢 CPU）
+        if (lyricState.mode !== 'lyrics') return;
+        if (!lyricState.lines.length) return;
+        var snap = M.player.state();
+        var t = snap ? (snap.position || 0) : 0;
+        var idx = M.lyrics.activeIndex(lyricState.lines, t);
+
+        if (idx !== lyricState.activeIndex) {
+          var prev = lyricPanel.querySelector('.m-lyric-line.is-current');
+          if (prev) prev.classList.remove('is-current');
+          lyricState.activeIndex = idx;
+          var row = idx >= 0
+            ? lyricPanel.querySelector('.m-lyric-line[data-index="' + idx + '"]')
+            : null;
+          if (row) row.classList.add('is-current');
+          if (idx >= 0) scrollToActive(false);
+        }
+
+        // 逐字扫光：只动当前行的词
+        var cur = lyricPanel.querySelector('.m-lyric-line.is-current');
+        if (!cur) return;
+        var words = cur.querySelectorAll('.m-lyric-word');
+        if (!words.length) return;
+        for (var i = 0; i < words.length; i++) {
+          var el = words[i];
+          var wt = Number(el.getAttribute('data-t'));
+          var wd = Number(el.getAttribute('data-d'));
+          var p = wd > 0 ? (t - wt) / wd : (t >= wt ? 1 : 0);
+          p = Math.max(0, Math.min(1, p));
+          el.style.setProperty('--p', (p * 100).toFixed(1) + '%');
+        }
+      }
+
+      var lyricRafLocal = null;
+      function loopLyrics() {
+        tickLyrics();
+        lyricRafLocal = requestAnimationFrame(loopLyrics);
+      }
+      if (lyricRaf) { cancelAnimationFrame(lyricRaf); lyricRaf = null; }
+      lyricRaf = lyricRafLocal;
+
+      coverBtn.addEventListener('click', function () { toggleLyrics(); });
+      applyLyricMode();
+      loopLyrics();
 
       /* ------------------------------------------------ 刷新 */
 
@@ -197,9 +440,11 @@
         live.hidden = !has;
         if (!has) return;
 
-        if (snap.cover) cover.setAttribute('src', snap.cover);
-        else cover.removeAttribute('src');
+        ui.setCover(cover, snap.cover, 500);
         cover.setAttribute('alt', (snap.trackName || '曲目') + ' 封面');
+
+        // 换歌了就把歌词换掉（同一首歌只取一次）
+        loadLyrics(snap.track && snap.track.id);
 
         title.textContent = snap.trackName || '';
         artist.textContent = snap.artist || '';
@@ -231,6 +476,12 @@
         } else {
           qualityNote.textContent = '';
         }
+
+        // 播放模式：顺序 / 单曲循环 / 列表循环 / 随机
+        var rm = snap.repeat || 'off';
+        repeatBtn.textContent = REPEAT_LABEL[rm] || '顺序';
+        repeatBtn.setAttribute('aria-label', '播放模式 · ' + (REPEAT_LABEL[rm] || '顺序'));
+        repeatBtn.classList.toggle('is-on', rm !== 'off');
       }
 
       // 订阅播放引擎的状态变化：界面跟着刷新，不手动回来
@@ -247,6 +498,7 @@
     leave: function () {
       alive = false;
       if (unsubscribe) { try { unsubscribe(); } catch (_) {} unsubscribe = null; }
+      if (lyricRaf) { try { cancelAnimationFrame(lyricRaf); } catch (_) {} lyricRaf = null; }
     }
   };
 

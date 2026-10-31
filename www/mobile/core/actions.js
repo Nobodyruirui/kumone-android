@@ -94,6 +94,152 @@
     });
   }
 
+  /* --------------------------------------------------------- 加入歌单 */
+
+  /** 拿当前账号的 uid（我的歌单要它）。 */
+  async function currentUid() {
+    var r = await M.service.account();
+    return (r && r.ok && r.data) ? r.data.userId : 0;
+  }
+
+  /**
+   * 「加入歌单」面板：从底部滑上来，列出现有歌单，也能直接新建。
+   * 不切页面 —— 用户的上下文（正在看的歌单 / 正在听的歌）不丢。
+   *
+   * @param {object} track 要加入的曲目（归一化后的）
+   */
+  function addToPlaylist(track) {
+    if (!track || !track.id) return;
+    var ui = M.ui;
+    var panel = ui.sheet({ title: '加入歌单' });
+    panel.setBody(ui.skeleton(2, '加载歌单'));
+
+    currentUid()
+      .then(function (uid) { return M.service.myPlaylists(uid); })
+      .then(function (r) {
+        if (!r || r.ok !== true) {
+          panel.setBody(ui.errorCard(r || M.errors.make('KUMONE_NETWORK', {
+            cause: '没有拿到歌单列表'
+          })));
+          return null;
+        }
+        var list = r.data || [];
+        var box = ui.el('div', { class: 'm-sheet-list', role: 'list', 'aria-label': '我的歌单' });
+
+        list.forEach(function (pl) {
+          var item = ui.el('button', {
+            class: 'm-sheet-item',
+            type: 'button',
+            'aria-label': '加入歌单 · ' + pl.name
+          });
+          item.appendChild(ui.cover({
+            url: pl.cover, alt: '', className: 'm-sheet-cover', size: 96
+          }));
+          item.appendChild(ui.el('span', { class: 'm-sheet-item-name' }, pl.name));
+          item.addEventListener('click', function () {
+            doAdd(pl, track, panel);
+          });
+          box.appendChild(item);
+        });
+
+        // 新建歌单：名字 + 直接加进去
+        var create = ui.el('div', { class: 'm-sheet-create' });
+        var input = ui.el('input', {
+          class: 'm-field',
+          type: 'text',
+          placeholder: '新歌单名字',
+          'aria-label': '新歌单名字'
+        });
+        var createBtn = ui.button('新建并加入', 'primary', function () {
+          var name = String(input.value || '').trim();
+          if (!name) {
+            if (M.shell) M.shell.toast('先给歌单起个名字');
+            input.focus();
+            return;
+          }
+          createBtn.disabled = true;
+          createBtn.textContent = '创建中…';
+          Promise.resolve(M.service.createPlaylist(name)).then(function (r2) {
+            if (!r2 || r2.ok !== true) {
+              createBtn.disabled = false;
+              createBtn.textContent = '新建并加入';
+              if (M.shell) M.shell.toast((r2 && r2.title) || '建歌单失败');
+              return;
+            }
+            doAdd(r2.data, track, panel);
+          });
+        });
+        create.appendChild(input);
+        create.appendChild(createBtn);
+        box.appendChild(create);
+
+        panel.setBody(box);
+        return list;
+      })
+      .catch(function (e) {
+        panel.setBody(ui.errorCard(M.errors.make('KUMONE_NETWORK', {
+          expected: 'await service.myPlaylists(uid)',
+          state: '拉歌单列表时抛了异常',
+          cause: (e && e.message) || String(e),
+          next: '关掉面板重试'
+        })));
+      });
+  }
+
+  /** 真的加进去：成功给吐司，失败给错误卡（面板不关，让人能重试）。 */
+  function doAdd(pl, track, panel) {
+    if (!pl || !pl.id) return;
+    Promise.resolve(M.service.addToPlaylist(pl.id, [track.id])).then(function (r) {
+      if (!r || r.ok !== true) {
+        if (M.shell) M.shell.toast((r && r.title) || '加入失败');
+        return;
+      }
+      if (M.shell) M.shell.toast('已加入《' + (pl.name || '歌单') + '》');
+      if (panel) panel.close();
+    });
+  }
+
+  /**
+   * 新建歌单（资料库「我的歌单」页用）。
+   * @param {function} [onDone] 建好之后的回调（用来刷新列表）
+   */
+  function newPlaylist(onDone) {
+    var ui = M.ui;
+    var panel = ui.sheet({ title: '新建歌单' });
+    var box = ui.el('div', { class: 'm-sheet-create' });
+    var input = ui.el('input', {
+      class: 'm-field',
+      type: 'text',
+      placeholder: '歌单名字',
+      'aria-label': '歌单名字'
+    });
+    var ok = ui.button('新建', 'primary', function () {
+      var name = String(input.value || '').trim();
+      if (!name) {
+        if (M.shell) M.shell.toast('先给歌单起个名字');
+        input.focus();
+        return;
+      }
+      ok.disabled = true;
+      ok.textContent = '创建中…';
+      Promise.resolve(M.service.createPlaylist(name)).then(function (r) {
+        ok.disabled = false;
+        ok.textContent = '新建';
+        if (!r || r.ok !== true) {
+          if (M.shell) M.shell.toast((r && r.title) || '建歌单失败');
+          return;
+        }
+        panel.close();
+        if (M.shell) M.shell.toast('已新建《' + name + '》');
+        if (typeof onDone === 'function') onDone(r.data);
+      });
+    });
+    box.appendChild(input);
+    box.appendChild(ok);
+    panel.setBody(box);
+    setTimeout(function () { try { input.focus(); } catch (_) {} }, 120);
+  }
+
   M.actions = {
     openPlaylist: openPlaylist,
     openArtist: openArtist,
@@ -101,6 +247,8 @@
     toLogin: toLogin,
     playTracks: playTracks,
     refreshAccount: refreshAccount,
-    confirmLogout: confirmLogout
+    confirmLogout: confirmLogout,
+    addToPlaylist: addToPlaylist,
+    newPlaylist: newPlaylist
   };
 })(window.Mobile = window.Mobile || {});

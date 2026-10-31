@@ -34,6 +34,14 @@
         var r = await M.service.myPlaylists(uid);
         return r.ok ? { ok: true, data: r.data } : r;
       },
+      // 头部动作：新建歌单（建好要把列表刷新一下）
+      header: function (reload) {
+        var wrap = ui.el('div', { class: 'm-action-row' });
+        wrap.appendChild(ui.button('新建歌单', 'primary', function () {
+          M.actions.newPlaylist(function () { reload(); });
+        }));
+        return wrap;
+      },
       render: function (list) {
         var grid = ui.el('div', { class: 'm-grid', role: 'list', 'aria-label': '我的歌单' });
         list.forEach(function (pl) {
@@ -44,6 +52,29 @@
             cover: pl.cover,
             ariaLabel: '歌单 ' + pl.name,
             onClick: function () { M.actions.openPlaylist(pl); }
+          }));
+          grid.appendChild(li);
+        });
+        return grid;
+      }
+    },
+
+    favalbums: {
+      title: '收藏的专辑',
+      load: async function () {
+        var r = await M.service.likedAlbums();
+        return r.ok ? { ok: true, data: r.data } : r;
+      },
+      render: function (list) {
+        var grid = ui.el('div', { class: 'm-grid', role: 'list', 'aria-label': '收藏的专辑' });
+        list.forEach(function (al) {
+          var li = ui.el('div', { class: 'm-grid-item', role: 'listitem' });
+          li.appendChild(ui.tile({
+            name: al.name,
+            sub: al.artistName || null,
+            cover: al.pic,
+            ariaLabel: '专辑 ' + al.name,
+            onClick: function () { M.actions.openAlbum(al); }
           }));
           grid.appendChild(li);
         });
@@ -142,11 +173,22 @@
           load();
         }
 
+        // 重新拉一次（新建歌单后要刷新列表）
+        function reload() {
+          retry();
+        }
+
         function load() {
           Promise.resolve(spec.load()).then(function (r) {
             if (!body.isConnected) return;
             body.setAttribute('aria-busy', 'false');
             body.textContent = '';
+
+            // 头部动作（如「新建歌单」）先摆上
+            if (spec.header) {
+              var h = spec.header(reload);
+              if (h) body.appendChild(h);
+            }
 
             if (!r || r.ok !== true) {
               var err = r || M.errors.make('KUMONE_NETWORK', { cause: '服务层没有返回结果' });

@@ -87,8 +87,13 @@
         // 当前曲目的大卡
         var card = ui.el('div', { class: 'm-card m-fm-card', role: 'group', 'aria-label': '当前广播' });
         card.setAttribute('data-role', FM_ROLE);
-        var cover = ui.el('img', { class: 'm-fm-cover', alt: (track.name || '曲目') + ' 封面' });
-        if (track.album && track.album.picUrl) cover.setAttribute('src', track.album.picUrl);
+        var cover = ui.cover({
+          url: track.album && track.album.picUrl,
+          alt: (track.name || '曲目') + ' 封面',
+          className: 'm-fm-cover',
+          size: 300,
+          eager: true
+        });
         card.appendChild(cover);
         var info = ui.el('div', { class: 'm-fm-info' });
         info.appendChild(ui.el('div', { class: 'm-fm-name' }, track.name || ''));

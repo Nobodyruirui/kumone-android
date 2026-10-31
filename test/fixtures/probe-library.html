@@ -14,8 +14,8 @@
   自检探针：资料库（ticket 10）。
 
   探针把 Mobile.service 换成假服务，逐个场景断言：
-    1. 未登录点「资料库」→ 直接进扫码页，不是五个点不动的入口
-    2. 已登录点「资料库」→ 五个入口都在，各自带 ref，摘要异步补上
+    1. 未登录点「资料库」→ 直接进扫码页，不是几个点不动的入口
+    2. 已登录点「资料库」→ 六个入口都在，各自带 ref，摘要异步补上
     3. 点「播放列表」→ 进我的歌单列表
     4. 点「喜欢的音乐」→ 进曲目列表
     5. 顶栏账号区 → 显示昵称；点它弹确认框；确认后调 logout 并回主页
@@ -115,14 +115,14 @@ async function run() {
 
     ok('已登录进资料库', M.state.view.type === 'library', M.state.view.type);
 
-    var NAMES = ['播放列表', '喜欢的音乐', '云盘', '最近播放', '听歌排行'];
+    var NAMES = ['播放列表', '喜欢的音乐', '收藏的专辑', '云盘', '最近播放', '听歌排行'];
     var snap = M.snapshot();
     NAMES.forEach(function (n) {
       ok('入口「' + n + '」带 ref', !!findRef(snap.tree, 'button', n));
     });
-    ok('五个入口都在', doc.querySelectorAll('#m-view .m-list-row').length === 5,
+    ok('六个入口都在', doc.querySelectorAll('#m-view .m-list-row').length === 6,
       '实际 ' + doc.querySelectorAll('#m-view .m-list-row').length);
-    ok('角色色点按角色分配', doc.querySelectorAll('#m-view .m-list-dot').length === 5);
+    ok('角色色点按角色分配', doc.querySelectorAll('#m-view .m-list-dot').length === 6);
 
     // 摘要异步补上
     var subs = Array.prototype.map.call(doc.querySelectorAll('#m-view .m-list-row .m-track-sub'),

@@ -11,6 +11,7 @@
 
   // Channel -> API call mapping (mirrors main.js CHANNELS).
   var dispatch = {
+    cellphoneLogin: function (a) { return API.cellphoneLogin(a.phone, a.password); },
     qrKey: function () { return API.qrKey(); },
     qrCheck: function (a) { return API.qrCheck(a.key); },
     logout: function () { return API.logout(); },

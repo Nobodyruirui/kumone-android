@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<title>Kumone 登录页自检</title>
+<style>
+  body { font: 13px/1.6 system-ui, sans-serif; margin: 20px; }
+  iframe { width: 390px; height: 760px; border: 1px solid #ddd; }
+  pre { background: #0a0a0a; color: #e8e8ea; padding: 12px; border-radius: 10px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<!--
+  自检探针：登录页（.scratch/phone-fixes/issues/03-password-login）。
+
+  登录的两个通道都换成**假服务**（不打真网络）：
+    · cellphoneLogin —— 按手机号/密码给成功或「账号或密码错误」
+    · qrKey / qrImage / qrCheck —— 假二维码，让扫码 Tab 也能被驱动
+
+  断言：
+    1. 登录页有「账号登录 / 扫码登录」两个 Tab，默认落在账号登录
+    2. 账号登录有手机号与密码两个输入框
+    3. 填对手机号密码 → 登录成功 → 回到原页面
+    4. 密码错 → 显示错误卡，且错误码是 KUMONE_LOGIN_FAILED
+    5. 密码不落盘：localStorage 里没有密码
+    6. 切到扫码 Tab → 出现二维码；切回账号 Tab → 又是表单
+-->
+<iframe id="app" src="/www/index.html"></iframe>
+<pre id="result" data-result="PENDING">PENDING</pre>
+
+<script>
+var out = document.getElementById('result');
+var failures = [];
+var caught = [];
+function ok(name, cond, extra) {
+  if (!cond) failures.push(name + (extra ? ' :: ' + extra : ''));
+}
+function finish() {
+  var okAll = failures.length === 0;
+  out.setAttribute('data-result', okAll ? 'PASS' : 'FAIL');
+  out.textContent = (okAll ? 'PASS ' : 'FAIL ') +
+    (okAll ? '登录页自检通过' : ('失败项：' + failures.join('；'))) +
+    (caught.length ? (' | 运行时错误：' + caught.slice(0, 4).join(' | ')) : '');
+}
+function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+var frame = document.getElementById('app');
+frame.addEventListener('load', function () { setTimeout(run, 800); });
+
+window.addEventListener('error', function (e) {
+  caught.push('window error: ' + (e.message || ''));
+});
+window.addEventListener('unhandledrejection', function (e) {
+  caught.push('unhandled rejection: ' + ((e.reason && e.reason.message) || e.reason));
+});
+
+async function run() {
+  try {
+    var W = frame.contentWindow;
+    var M = W.Mobile;
+    var doc = W.document;
+    W.addEventListener('error', function (e) {
+      caught.push('iframe error: ' + (e.message || ''));
+    });
+
+    /* -------------------- 假服务 -------------------- */
+
+    var loginCalls = [];
+    M.service.loginByPassword = function (phone, password) {
+      loginCalls.push({ phone: phone, password: password });
+      if (phone === '13800000000' && password === 'good-pass') {
+        return Promise.resolve({ ok: true, data: { loggedIn: true } });
+      }
+      return Promise.resolve({
+        ok: false,
+        code: 'KUMONE_LOGIN_FAILED',
+        kind: 'permanent',
+        title: '账号或密码错误',
+        message: '账号或密码错误\nExpected: await loginByPassword\nState: 网易云返回 code=502\nBlocked by: 账号或密码错误\nNext: 核对手机号与密码后重试',
+        cause: '账号或密码错误',
+        next: '核对手机号与密码后重试'
+      });
+    };
+    M.service.qrKey = function () { return Promise.resolve({ ok: true, data: 'fake-unikey' }); };
+    M.service.qrImage = function () { return Promise.resolve({ ok: true, data: 'data:image/gif;base64,R0lGOD' }); };
+    M.service.qrCheck = function () { return Promise.resolve({ ok: true, data: { code: 801 } }); };
+
+    /* -------------------- 1. 两个 Tab -------------------- */
+
+    M.nav({ type: 'login' });
+    await wait(300);
+
+    var tabs = doc.querySelectorAll('#m-view [role="tab"]');
+    ok('登录页有两个 Tab', tabs.length === 2, 'Tab 数=' + tabs.length);
+    var accountTab = doc.querySelector('#m-view [role="tab"][aria-label="账号登录"]');
+    var scanTab = doc.querySelector('#m-view [role="tab"][aria-label="扫码登录"]');
+    ok('有「账号登录」Tab', !!accountTab);
+    ok('有「扫码登录」Tab', !!scanTab);
+    ok('默认落在账号登录', accountTab && accountTab.getAttribute('aria-selected') === 'true',
+      accountTab ? accountTab.getAttribute('aria-selected') : '');
+
+    /* -------------------- 2. 账号表单 -------------------- */
+
+    var phone = doc.querySelector('#m-view input[aria-label="手机号"]');
+    var pwd = doc.querySelector('#m-view input[aria-label="密码"]');
+    ok('有手机号输入框', !!phone);
+    ok('有密码输入框', !!pwd);
+    ok('密码框是密码类型', pwd && pwd.getAttribute('type') === 'password');
+
+    /* -------------------- 3. 密码错 -------------------- */
+
+    phone.value = '13800000000';
+    pwd.value = 'bad-pass';
+    doc.querySelector('#m-view button[aria-label="登录"]').click();
+    await wait(300);
+
+    ok('密码错时显示错误卡', doc.querySelectorAll('#m-view .m-err').length === 1);
+    var errCard = doc.querySelector('#m-view .m-err');
+    ok('错误卡按错误码分支（KUMONE_LOGIN_FAILED）',
+      errCard && errCard.getAttribute('data-code') === 'KUMONE_LOGIN_FAILED',
+      errCard ? errCard.getAttribute('data-code') : '');
+    ok('错误卡说明了账号或密码错误',
+      errCard && errCard.textContent.indexOf('账号或密码错误') >= 0);
+
+    /* -------------------- 4. 密码不落盘 -------------------- */
+
+    var dumped = '';
+    try {
+      for (var i = 0; i < W.localStorage.length; i++) {
+        var k = W.localStorage.key(i);
+        dumped += k + '=' + W.localStorage.getItem(k) + ';';
+      }
+    } catch (_) {}
+    ok('密码没有落进 localStorage', dumped.indexOf('good-pass') < 0 && dumped.indexOf('bad-pass') < 0, dumped);
+
+    /* -------------------- 5. 登录成功 -------------------- */
+
+    pwd.value = 'good-pass';
+    doc.querySelector('#m-view button[aria-label="登录"]').click();
+    await wait(900);
+
+    ok('确实把手机号与密码交给了服务层',
+      loginCalls.length === 2 && loginCalls[1].phone === '13800000000',
+      JSON.stringify(loginCalls));
+    ok('登录成功后离开登录页', M.state.view.type !== 'login', M.state.view.type);
+
+    /* -------------------- 6. 扫码 Tab -------------------- */
+
+    M.nav({ type: 'login' });
+    await wait(300);
+    scanTab = doc.querySelector('#m-view [role="tab"][aria-label="扫码登录"]');
+    scanTab.click();
+    await wait(300);
+
+    ok('切到扫码 Tab 后选中态正确', scanTab.getAttribute('aria-selected') === 'true');
+    ok('扫码 Tab 显示二维码', doc.querySelectorAll('#m-view .m-login-code').length === 1);
+    ok('扫码 Tab 下不再显示账号表单',
+      doc.querySelectorAll('#m-view input[aria-label="手机号"]').length === 0);
+
+    accountTab = doc.querySelector('#m-view [role="tab"][aria-label="账号登录"]');
+    accountTab.click();
+    await wait(200);
+    ok('切回账号 Tab 后又是表单', doc.querySelectorAll('#m-view input[aria-label="手机号"]').length === 1);
+
+    finish();
+  } catch (e) {
+    failures.push('异常：' + (e && e.message ? e.message : String(e)));
+    finish();
+  }
+}
+</script>
+</body>
+</html>

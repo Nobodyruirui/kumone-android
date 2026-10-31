@@ -49,10 +49,10 @@ Issue 与 spec 以 markdown 文件存放在 `.scratch/`（本地文件追踪）�
 | 内核层 | `www/kumone/lib/{crypto,client,api,unblock}.js` | weapi/eapi 加密、请求传输、API 封装、音源解锁。**除非修 bug，否则不要改** |
 | 原生桥 | `android/app/src/main/java/com/kumone/music/HTTPClientPlugin.java` | 绕 CORS 的原生 HTTP 插件 |
 | 上游原版渲染层 | `www/app.js` + `www/style.css` + `www/style-mobile.css` | 桌面取向的移植产物，**保留但不加载**，作为对照与回退基准 |
-| 移动端渲染层 | `www/mobile/` | 本项目主战场。`core/`（契约、外壳、路由、快照）、`views/`（各页面）、`css/`（令牌与样式）、`fonts/`、`learnings/`（知识包） |
-| 参考与待接线 | `www/mobile/reference/`、`www/mobile/features/lyrics/` | 旧皮肤层脚本与桌面主题样式（仅作对照）；逐字歌词模块（下一轮 feature 的起点，暂不加载） |
+| 移动端渲染层 | `www/mobile/` | 本项目主战场。`core/`（契约、外壳、路由、快照、歌词解析、手势）、`views/`（各页面）、`css/`（令牌与样式）、`fonts/`、`learnings/`（知识包） |
+| 参考与待接线 | `www/mobile/reference/`、`www/mobile/features/lyrics/` | 旧皮肤层脚本与桌面主题样式（仅作对照）；上游桌面版的逐字歌词模块（仅作对照，移动端自己的歌词实现在 `www/mobile/core/lyrics.js`） |
 
-登录走网易云官方扫码流程，Cookie 存 `localStorage`（`MUSIC_U`）。
+登录走网易云官方流程：默认**手机号 + 密码**（内核 `/login/cellphone`，密码的编码方式由内核自己试），**扫码登录**是备选 Tab。Cookie 存 `localStorage`（`MUSIC_U`）；密码只在一次请求里出现，不落盘。
 
 ## 移动端渲染层的公开接口
 
@@ -60,10 +60,20 @@ Issue 与 spec 以 markdown 文件存放在 `.scratch/`（本地文件追踪）�
 | --- | --- |
 | `Mobile.snapshot(opts?)` | 当前界面的语义文本树。`opts.scope='subtree'` + `opts.root='@N'` 取子树 |
 | `Mobile.act(ref, action, args?)` | 对 ref 执行动作。白名单：`click` / `scroll` / `focus` / `fill` |
-| `Mobile.nav/back/goTab(view)` | 导航栈（与上游语义一致） |
+| `Mobile.nav/back/goTab(view)` | 导航栈（与上游语义一致）。`back` 带转场动画；`back({skipGhost:true})` 用于手势接管的场景 |
 | `Mobile.views[type]` | 视图注册表，值形如 `{ title, render(view) }` |
 | `Mobile.shell.toast(msg)` / `setMini(track)` / `setMiniProgress(ratio)` | 外壳操作 |
 | `Mobile.errors.make(code, parts)` / `fromKernel(err, ctx)` / `retryable(err)` | 错误契约 |
+| `Mobile.lyrics.build({lrc,tlyric,yrc})` / `parseLrc` / `parseYrc` / `activeIndex(lines,t)` | 歌词解析（纯函数，逐字优先） |
+| `Mobile.service.loginByPassword(phone, pwd)` | 手机号 + 密码登录；密码不落盘 |
+| `Mobile.service.playlistDetail(id)` | 歌单 / 榜单详情（曲目在 `playlist.tracks`，顶层没有） |
+| `Mobile.service.songDetails(ids)` | 按 id 批量取曲目（「加载更多」用） |
+| `Mobile.service.createPlaylist(name)` / `addToPlaylist(pid, ids)` | 建歌单 / 加歌单 |
+| `Mobile.service.subscribeAlbum(id, on)` / `likedAlbums()` | 收藏专辑 / 收藏的专辑列表 |
+| `Mobile.actions.addToPlaylist(track)` / `newPlaylist(onDone)` | 打开「加入歌单」抽屉 / 新建歌单 |
+| `Mobile.ui.sheet({title})` | 底部抽屉（加入歌单、新建歌单用；不切页面） |
+| `Mobile.gesture.attach()` / `detach()` | 边缘左滑返回手势 |
+| `Mobile.systemBack()` | 系统返回键：有历史就返回上一页，没有就退出 App |
 | `window.kumone.invoke(channel, args)` | 内核门面（网易云能力入口） |
 
 **新增或修改任何公开接口，必须同时更新四处**：`接口定义 → 实现 → 回归测试 → 文档（AGENTS.md / 对应需求文档）`。
@@ -77,6 +87,11 @@ npm test                    # 加密基线自测：期望 ALL MATCH
 npm run test:live           # 真实接口联通：期望 6/6 endpoints OK
 npm run test:guard          # 设计约束闸：体积 / 临时 ref / 错误码 / 语义契约
 npm run test:learnings      # 知识包校验：禁临时 ref、工具必须可执行
+npm run test:lyrics         # 歌词解析纯函数（整行 / 逐字 / 翻译）
+npm run test:login:view     # 登录页双 Tab 自检（Edge headless）
+npm run test:detail:view    # 歌单/榜单详情自检（Edge headless）
+npm run test:mine:view      # 我的歌单/收藏专辑/播放模式自检（Edge headless）
+npm run test:back:view      # 边缘左滑返回与转场自检（Edge headless）
 npm run build:android       # 需本机 Android 环境
 ```
 

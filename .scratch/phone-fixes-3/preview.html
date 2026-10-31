@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<title>Kumone 第三轮效果预览</title>
+<style>
+  html, body { margin: 0; background: #ececef; font: 13px/1.6 system-ui, "Microsoft YaHei", sans-serif; }
+  .stage { width: 390px; height: 844px; margin: 20px auto; border: 10px solid #1b1b1e; border-radius: 38px; overflow: hidden; background: #fff; }
+  iframe { width: 390px; height: 844px; border: 0; display: block; }
+  .cap { text-align: center; color: #555; margin: 0 0 14px; }
+</style>
+</head>
+<body>
+<p class="cap" id="cap">加载中…</p>
+<div class="stage"><iframe id="app" src="/www/index.html"></iframe></div>
+
+<script>
+var scene = (location.search.match(/scene=(\w+)/) || [])[1] || 'sheet';
+var cap = document.getElementById('cap');
+var frame = document.getElementById('app');
+
+var COVER = 'https://p3.music.126.net/9Wn6lXmRkuvM3-6sFWxMlQ==/109951163078575129.jpg';
+var TRACK = {
+  id: 42, name: '催眠剂', artists: [{ id: 1, name: '陈文非' }],
+  album: { id: 2, name: '催眠剂', picUrl: COVER }, durationMS: 209000
+};
+
+function fakePlayer(track) {
+  var subs = [];
+  var state = {
+    playing: true, track: track, trackName: track.name,
+    artist: track.artists.map(function (a) { return a.name; }).join(' / '),
+    album: track.album.name, cover: track.album.picUrl,
+    position: 42, duration: 209, quality: 'lossless', requestedQuality: 'lossless',
+    volume: 0.9, repeat: 'off', queueLength: 12, index: 3, playNextLength: 0, error: null
+  };
+  return {
+    state: function () { return state; },
+    subscribe: function (fn) { subs.push(fn); return function () {}; },
+    setRepeat: function (m) { state.repeat = m; subs.forEach(function (f) { f(state); }); return state; },
+    toggle: function () { state.playing = !state.playing; subs.forEach(function (f) { f(state); }); },
+    seek: function () {}, setVolume: function () {}, setQuality: function () {},
+    next: function () {}, prev: function () {}, playQueue: function () {},
+    queueItems: function () { return [track]; }
+  };
+}
+
+frame.addEventListener('load', function () {
+  setTimeout(function () {
+    var W = frame.contentWindow;
+    var M = W.Mobile;
+    var doc = W.document;
+
+    M.service.account = function () {
+      return Promise.resolve({ ok: true, data: { userId: 9, nickname: '某人', vipType: 0 } });
+    };
+    M.service.myPlaylists = function () {
+      return Promise.resolve({ ok: true, data: [
+        { id: 11, name: '深夜循环', cover: COVER, creator: { nickname: '我' } },
+        { id: 12, name: '通勤路上', cover: COVER, creator: { nickname: '我' } },
+        { id: 13, name: '失眠专用', cover: COVER, creator: { nickname: '我' } }
+      ] });
+    };
+    M.service.addToPlaylist = function () {
+      return Promise.resolve({ ok: true, data: { added: 1 } });
+    };
+
+    if (scene === 'sheet') {
+      cap.textContent = '「加入歌单」底部抽屉：从下方滑入，可选歌单也能直接新建';
+      M.player = fakePlayer(TRACK);
+      M.nav({ type: 'nowplaying' });
+      setTimeout(function () {
+        var btn = doc.querySelector('#m-view button[aria-label="加入歌单"]');
+        if (btn) btn.click();
+        setTimeout(function () {
+          var imgs = doc.querySelectorAll('.m-sheet-cover');
+          var info = [];
+          for (var i = 0; i < imgs.length && i < 2; i++) {
+            info.push('src=' + imgs[i].getAttribute('src') +
+              ' first=' + imgs[i].getAttribute('data-cdn-first') +
+              ' tries=' + imgs[i].getAttribute('data-cdn-tries') +
+              ' loading=' + imgs[i].getAttribute('loading') +
+              ' w=' + imgs[i].naturalWidth);
+          }
+          cap.textContent = '「加入歌单」抽屉 · ' + info.join(' || ');
+        }, 1200);
+      }, 700);
+      return;
+    }
+
+    if (scene === 'np') {
+      cap.textContent = '播放页：新增「播放模式（顺序 / 单曲循环…）」与「加入歌单」';
+      M.player = fakePlayer(TRACK);
+      M.nav({ type: 'nowplaying' });
+      return;
+    }
+
+    if (scene === 'rows') {
+      cap.textContent = '歌单详情：每首歌右侧一个「+」，随手加进自己的歌单';
+      M.service.playlistDetail = function () {
+        var tracks = [];
+        for (var i = 0; i < 4; i++) {
+          tracks.push({
+            id: 42 + i, name: '曲目 ' + (i + 1), artists: [{ id: 1, name: '某某乐队' }],
+            album: { id: 2, name: '夜行', picUrl: COVER }, durationMS: 209000
+          });
+        }
+        return Promise.resolve({ ok: true, data: {
+          playlist: { id: 1, name: '深夜循环', trackCount: 4, cover: COVER, creator: { nickname: '我' }, tracks: tracks, trackIds: [] },
+          tracks: tracks, trackIds: [], total: 4
+        }});
+      };
+      M.nav({ type: 'playlist', id: 1, name: '深夜循环' });
+      return;
+    }
+  }, 700);
+});
+</script>
+</body>
+</html>

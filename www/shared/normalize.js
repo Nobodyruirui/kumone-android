@@ -27,6 +27,7 @@
     // 裸全局导出：上游原版渲染层（www/app.js）用的就是这些裸标识符。
     // 这样共享版落地后，上游将来要切过来只需要删掉自己的副本，
     // 不必改动它那 20 余处调用点（本轮不动上游，见 ADR-0001）。
+    root.imageUrl = api.imageUrl;
     root.normalizeTrack = api.normalizeTrack;
     root.normalizeTracks = api.normalizeTracks;
     root.normalizePlaylist = api.normalizePlaylist;
@@ -49,6 +50,40 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
+  /* ------------------------------------------------------------ 图片 */
+
+  /**
+   * 把网易云返回的图片地址规整成**能直接显示**的地址。
+   *
+   * 为什么需要它（真机实证）：
+   *   网易云对**歌曲**封面返回 `http://p1..p4.music.126.net/...`，
+   *   对**歌单 / 专辑**封面返回 `https://...`。
+   *   App 的页面 origin 是 `https://localhost`（Capacitor androidScheme=https），
+   *   而 Capacitor 默认 `android.allowMixedContent = false` ——
+   *   于是 http 图片被当成混合内容拦掉：歌单封面有、歌曲封面没有。
+   *
+   * 规则（纯函数，可 Node 断言）：
+   *   - 空 / 非字符串 → null（不给界面一个无效的 src）
+   *   - 协议相对地址 `//host/x` → `https://host/x`
+   *   - `http://` → `https://`
+   *   - 追加尺寸参数 `?param=<size>y<size>`（网易云图片服务自带裁剪）
+   *
+   * @param {string} raw 接口返回的图片地址
+   * @param {number} [size] 期望的边长（像素）；缺省不加参数
+   * @returns {string|null}
+   */
+  function imageUrl(raw, size) {
+    if (!raw || typeof raw !== 'string') return null;
+    var u = raw.trim();
+    if (!u) return null;
+    if (u.indexOf('//') === 0) u = 'https:' + u;
+    else if (u.indexOf('http://') === 0) u = 'https://' + u.slice('http://'.length);
+    if (size && u.indexOf('param=') < 0) {
+      u += (u.indexOf('?') >= 0 ? '&' : '?') + 'param=' + size + 'y' + size;
+    }
+    return u;
+  }
+
   /* ------------------------------------------------------------ 曲目 */
 
   /**
@@ -67,7 +102,7 @@
       album: {
         id: ((raw.al || raw.album) || {}).id || 0,
         name: ((raw.al || raw.album) || {}).name || '',
-        picUrl: ((raw.al || raw.album) || {}).picUrl || null
+        picUrl: imageUrl(((raw.al || raw.album) || {}).picUrl)
       },
       durationMS: raw.dt || raw.duration || 0,
       alias: raw.alia || raw.alias || [],
@@ -101,7 +136,7 @@
     return {
       id: raw.id,
       name: raw.name || '',
-      cover: raw.picUrl || raw.coverImgUrl || null,
+      cover: imageUrl(raw.picUrl || raw.coverImgUrl),
       playCount: raw.playCount != null ? raw.playCount : (raw.playcount || 0),
       trackCount: raw.trackCount || 0,
       copywriter: raw.copywriter || null,
@@ -121,7 +156,7 @@
     return {
       id: raw.id,
       name: raw.name || '',
-      pic: raw.picUrl || raw.cover || null,
+      pic: imageUrl(raw.picUrl || raw.cover),
       artistName: artists.map(function (a) { return a.name; })
         .filter(Boolean).join(' / '),
       artistId: (raw.artist || {}).id || 0,
@@ -135,7 +170,7 @@
     return {
       id: raw.id,
       name: raw.name || '',
-      pic: raw.picUrl || raw.cover || raw.avatar || raw.img1v1Url || null,
+      pic: imageUrl(raw.picUrl || raw.cover || raw.avatar || raw.img1v1Url),
       albumSize: raw.albumSize || 0,
       musicSize: raw.musicSize || 0,
       alias: raw.alias || [],
@@ -216,7 +251,7 @@
     return {
       userId: raw.userId || 0,
       nickname: raw.nickname || '',
-      avatarUrl: raw.avatarUrl || null,
+      avatarUrl: imageUrl(raw.avatarUrl),
       vipType: raw.vipType || 0
     };
   }
@@ -236,6 +271,7 @@
   }
 
   return {
+    imageUrl: imageUrl,
     normalizeTrack: normalizeTrack,
     normalizeTracks: normalizeTracks,
     normalizePlaylist: normalizePlaylist,

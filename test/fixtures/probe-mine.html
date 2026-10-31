@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<title>Kumone 我的歌单 / 收藏自检</title>
+<style>
+  body { font: 13px/1.6 system-ui, sans-serif; margin: 20px; }
+  iframe { width: 390px; height: 760px; border: 1px solid #ddd; }
+  pre { background: #0a0a0a; color: #e8e8ea; padding: 12px; border-radius: 10px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<!--
+  自检探针：我的内容（.scratch/phone-fixes-3/issues/01-playlist-and-fav）。
+
+  断言：
+    1. 播放页有「加入歌单」与「播放模式」两个按钮
+    2. 播放模式能在 顺序 → 单曲循环 → 列表循环 → 随机 之间切换，并写进引擎
+    3. 点「加入歌单」弹出底部抽屉，列出我的歌单，并能新建
+    4. 歌单详情每一行都有「+」按钮
+    5. 资料库有「收藏的专辑」入口；我的歌单页有「新建歌单」
+    6. 专辑页有「收藏」按钮，点击能收藏
+-->
+<iframe id="app" src="/www/index.html"></iframe>
+<pre id="result" data-result="PENDING">PENDING</pre>
+
+<script>
+var out = document.getElementById('result');
+var failures = [];
+var caught = [];
+function ok(name, cond, extra) {
+  if (!cond) failures.push(name + (extra ? ' :: ' + extra : ''));
+}
+function finish() {
+  var okAll = failures.length === 0;
+  out.setAttribute('data-result', okAll ? 'PASS' : 'FAIL');
+  out.textContent = (okAll ? 'PASS ' : 'FAIL ') +
+    (okAll ? '我的内容自检通过' : ('失败项：' + failures.join('；'))) +
+    (caught.length ? (' | 运行时错误：' + caught.slice(0, 4).join(' | ')) : '');
+}
+function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+var frame = document.getElementById('app');
+frame.addEventListener('load', function () { setTimeout(run, 800); });
+
+window.addEventListener('error', function (e) { caught.push('window error: ' + (e.message || '')); });
+window.addEventListener('unhandledrejection', function (e) {
+  caught.push('unhandled rejection: ' + ((e.reason && e.reason.message) || e.reason));
+});
+
+var TRACK = {
+  id: 42, name: '催眠剂', artists: [{ id: 1, name: '陈文非' }],
+  album: { id: 2, name: '催眠剂', picUrl: 'http://p3.music.126.net/c.jpg' }, durationMS: 209000
+};
+
+async function run() {
+  try {
+    var W = frame.contentWindow;
+    var M = W.Mobile;
+    var doc = W.document;
+    W.addEventListener('error', function (e) { caught.push('iframe error: ' + (e.message || '')); });
+
+    /* ---------------- 假服务 ---------------- */
+
+    var added = [];
+    M.service.isLoggedIn = function () { return Promise.resolve(true); };
+    M.service.account = function () {
+      return Promise.resolve({ ok: true, data: { userId: 9, nickname: '某人', vipType: 0 } });
+    };
+    M.service.myPlaylists = function () {
+      return Promise.resolve({ ok: true, data: [
+        { id: 11, name: '我的歌单一', cover: 'http://p1.music.126.net/a.jpg', creator: { nickname: '我' } },
+        { id: 12, name: '我的歌单二', cover: 'http://p1.music.126.net/b.jpg', creator: { nickname: '我' } }
+      ] });
+    };
+    M.service.createPlaylist = function () {
+      return Promise.resolve({ ok: true, data: { id: 99, name: '新建的歌单', cover: null } });
+    };
+    M.service.addToPlaylist = function (pid, ids) {
+      added.push({ pid: pid, ids: ids });
+      return Promise.resolve({ ok: true, data: { playlistId: pid, added: ids.length } });
+    };
+    M.service.likedAlbums = function () {
+      // 故意不含 id=7：专辑页要显示「未收藏」，点了才变「已收藏」
+      return Promise.resolve({ ok: true, data: [
+        { id: 88, name: '别的专辑', pic: 'http://p2.music.126.net/x.jpg', artistName: '甲乐队' }
+      ] });
+    };
+    M.service.subscribeAlbum = function (id, sub) {
+      return Promise.resolve({ ok: true, data: { subscribed: sub } });
+    };
+    M.service.playlistDetail = function () {
+      return Promise.resolve({ ok: true, data: {
+        playlist: { id: 1, name: '测试歌单', trackCount: 3, cover: 'http://p4.music.126.net/c.jpg',
+                    creator: { nickname: '我' }, tracks: [], trackIds: [] },
+        tracks: [TRACK, TRACK, TRACK], trackIds: [{ id: 42 }], total: 3
+      } });
+    };
+
+    // 假播放器：带 repeat 状态
+    var rep = 'off';
+    var subs = [];
+    var pstate = {
+      playing: false, track: TRACK, trackName: TRACK.name, artist: '陈文非',
+      album: '催眠剂', cover: TRACK.album.picUrl, position: 0, duration: 209,
+      quality: 'standard', requestedQuality: 'standard', volume: 0.9,
+      repeat: 'off', queueLength: 1, index: 0, playNextLength: 0, error: null
+    };
+    M.player = {
+      state: function () { return pstate; },
+      subscribe: function (fn) { subs.push(fn); return function () {}; },
+      setRepeat: function (m) { rep = m; pstate.repeat = m; subs.forEach(function (f) { f(pstate); }); return pstate; },
+      toggle: function () { pstate.playing = !pstate.playing; subs.forEach(function (f) { f(pstate); }); },
+      seek: function () {}, setVolume: function () {}, setQuality: function () {},
+      next: function () {}, prev: function () {}, playQueue: function () {},
+      queueItems: function () { return [TRACK]; }
+    };
+
+    /* ---------------- 1. 播放页按钮 ---------------- */
+
+    M.nav({ type: 'nowplaying' });
+    await wait(500);
+
+    var addBtn = doc.querySelector('#m-view button[aria-label="加入歌单"]');
+    ok('播放页有「加入歌单」按钮', !!addBtn);
+    var repeatBtn = doc.querySelector('#m-view .m-np-repeat-btn');
+    ok('播放页有「播放模式」按钮', !!repeatBtn);
+    ok('播放模式初始是「顺序」', repeatBtn && repeatBtn.textContent === '顺序',
+      repeatBtn ? repeatBtn.textContent : '');
+
+    /* ---------------- 2. 播放模式切换 ---------------- */
+
+    repeatBtn.click();
+    await wait(200);
+    ok('点一下变「单曲循环」', repeatBtn.textContent === '单曲循环', repeatBtn.textContent);
+    ok('引擎状态也跟着变', rep === 'one', rep);
+    repeatBtn.click();
+    await wait(200);
+    ok('再点变「列表循环」', repeatBtn.textContent === '列表循环', repeatBtn.textContent);
+    repeatBtn.click();
+    await wait(200);
+    ok('再点变「随机」', repeatBtn.textContent === '随机', repeatBtn.textContent);
+    repeatBtn.click();
+    await wait(200);
+    ok('再点回到「顺序」', repeatBtn.textContent === '顺序', repeatBtn.textContent);
+
+    /* ---------------- 3. 加入歌单抽屉 ---------------- */
+
+    addBtn.click();
+    await wait(500);
+    var sheet = doc.querySelector('.m-sheet');
+    ok('点「加入歌单」弹出底部抽屉', !!sheet);
+    ok('抽屉里列出了我的歌单', doc.querySelectorAll('.m-sheet-item').length === 2,
+      '项数=' + doc.querySelectorAll('.m-sheet-item').length);
+    ok('抽屉里有新建歌单的输入框', !!doc.querySelector('.m-sheet input[aria-label="新歌单名字"]'));
+
+    doc.querySelectorAll('.m-sheet-item')[1].click();
+    await wait(400);
+    ok('选一个歌单就真的加了', added.length === 1 && added[0].pid === 12,
+      JSON.stringify(added));
+    ok('加完抽屉关掉', !doc.querySelector('.m-sheet'));
+
+    /* ---------------- 4. 详情每行的「+」 ---------------- */
+
+    M.nav({ type: 'playlist', id: 1, name: '测试歌单' });
+    await wait(600);
+    var addBtns = doc.querySelectorAll('#m-view .m-track-add');
+    ok('歌单详情每一行都有「+」按钮', addBtns.length === 3, '数量=' + addBtns.length);
+    ok('「+」按钮有语义名（模型能点）',
+      !!doc.querySelector('#m-view .m-track-add[aria-label^="加入歌单"]'));
+
+    /* ---------------- 5. 资料库与我的歌单 ---------------- */
+
+    M.goTab('library');
+    await wait(600);
+    var rows = Array.prototype.map.call(
+      doc.querySelectorAll('#m-view .m-list-row'),
+      function (b) { return b.getAttribute('aria-label'); });
+    ok('资料库有「收藏的专辑」入口', rows.indexOf('收藏的专辑') >= 0, rows.join(','));
+
+    M.nav({ type: 'myplaylists', label: '播放列表' });
+    await wait(500);
+    ok('我的歌单页有「新建歌单」按钮',
+      !!doc.querySelector('#m-view button[aria-label="新建歌单"]'));
+
+    /* ---------------- 6. 专辑页收藏 ---------------- */
+
+    M.service.album = function () {
+      return Promise.resolve({ ok: true, data: {
+        album: { id: 7, name: '收藏的专辑', pic: 'http://p2.music.126.net/x.jpg', artistName: '甲乐队', size: 3 },
+        songs: [TRACK]
+      } });
+    };
+    M.nav({ type: 'album', id: 7, name: '收藏的专辑' });
+    await wait(600);
+    var favBtn = doc.querySelector('#m-view button[aria-label="收藏专辑"]');
+    ok('专辑页有「收藏」按钮', !!favBtn);
+    if (favBtn) {
+      favBtn.click();
+      await wait(300);
+      ok('点一下变成「已收藏」', favBtn.textContent === '已收藏', favBtn.textContent);
+    }
+
+    finish();
+  } catch (e) {
+    failures.push('异常：' + (e && e.message ? e.message : String(e)));
+    finish();
+  }
+}
+</script>
+</body>
+</html>

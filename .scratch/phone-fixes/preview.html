@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<title>Kumone 本轮效果预览</title>
+<style>
+  html, body { margin: 0; background: #ececef; font: 13px/1.6 system-ui, "Microsoft YaHei", sans-serif; }
+  .stage { width: 390px; height: 844px; margin: 24px auto; border: 10px solid #1b1b1e; border-radius: 38px; overflow: hidden; background: #fff; }
+  iframe { width: 390px; height: 844px; border: 0; display: block; }
+  .cap { text-align: center; color: #555; margin: 0 0 16px; }
+</style>
+</head>
+<body>
+<!--
+  效果预览：把 App 装进手机尺寸的框里，假数据驱动。
+  用法：?scene=lyrics | login
+-->
+<p class="cap" id="cap">加载中…</p>
+<div class="stage"><iframe id="app" src="/www/index.html"></iframe></div>
+
+<script>
+var scene = (location.search.match(/scene=(\w+)/) || [])[1] || 'lyrics';
+var cap = document.getElementById('cap');
+var frame = document.getElementById('app');
+
+var LYRIC_YRC = [
+  '[0,1000](0,1000,0)作词 : 某某',
+  '[1000,3000](1000,1000,0)走在(2000,1000,0)街上',
+  '[4000,3000](4000,1000,0)路灯(5000,1000,0)把夜(6000,1000,0)照亮',
+  '[7000,3000](7000,1000,0)我想(8000,1000,0)把(9000,1000,0)歌唱',
+  '[10000,3000](10000,1000,0)唱给(11000,1000,0)明天的(12000,1000,0)太阳'
+].join('\n');
+
+frame.addEventListener('load', function () {
+  setTimeout(function () {
+    var W = frame.contentWindow;
+    var M = W.Mobile;
+    var doc = W.document;
+
+    // 假服务：歌词走真解析，数据自己给
+    M.service.lyric = function () {
+      return Promise.resolve({
+        ok: true,
+        data: { lrc: null, tlyric: null, yrc: LYRIC_YRC }
+      });
+    };
+
+    // 假播放器：状态字段与真的一致
+    var track = {
+      id: 1, name: '夜行', durationMS: 240000,
+      artists: [{ id: 1, name: '某某乐队' }],
+      album: { id: 2, name: '夜行', picUrl: 'https://p1.music.126.net/demo-cover.jpg' }
+    };
+    var subs = [];
+    var st = {
+      playing: true, track: track, trackName: track.name,
+      artist: '某某乐队', album: '夜行',
+      cover: track.album.picUrl,
+      position: 4.4, duration: 240, quality: 'lossless', requestedQuality: 'lossless',
+      volume: 0.9, repeat: 'off', queueLength: 12, index: 3, playNextLength: 0, error: null
+    };
+    M.player = {
+      state: function () { return st; },
+      subscribe: function (fn) { subs.push(fn); return function () {}; },
+      toggle: function () { st.playing = !st.playing; subs.forEach(function (f) { f(st); }); },
+      seek: function () {}, setVolume: function () {}, setQuality: function () {},
+      next: function () {}, prev: function () {}, playQueue: function () {},
+      queueItems: function () { return [track]; }
+    };
+
+    if (scene === 'login') {
+      cap.textContent = '登录页：默认落在「账号登录」，扫码是备选 Tab';
+      M.nav({ type: 'login' });
+    } else {
+      cap.textContent = '播放页：点「歌词」切到歌词视图（逐字卡拉 OK，当前行居中）';
+      M.nav({ type: 'nowplaying' });
+      setTimeout(function () {
+        var btn = doc.querySelector('#m-view .m-np-lyric-btn');
+        if (btn) btn.click();
+      }, 700);
+    }
+  }, 600);
+});
+</script>
+</body>
+</html>

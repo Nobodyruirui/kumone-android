@@ -40,7 +40,7 @@ const v3 = nz.normalizeTrack({
 });
 check('v3 字段：id 透传', v3.id === 123);
 check('v3 字段：艺人归一化', v3.artists.length === 2 && v3.artists[1].name === '乙');
-check('v3 字段：专辑归一化', v3.album.name === '测试专辑' && v3.album.picUrl === 'http://p/cover.jpg');
+check('v3 字段：专辑归一化', v3.album.name === '测试专辑' && v3.album.picUrl === 'https://p/cover.jpg');
 check('v3 字段：时长归一化', v3.durationMS === 210000);
 check('艺人名拼接', nz.artistNames(v3) === '甲 / 乙');
 check('副标题优先译名', nz.trackSubtitle(v3) === '副标一');
@@ -91,6 +91,7 @@ check('可播性标签可展示', nz.playabilityLabel('vipOnly') === 'VIP 专属
 /* 6. 账号与播放地址 */
 const acc = nz.normalizeAccount({ userId: 42, nickname: '某人', avatarUrl: 'http://a', vipType: 1 });
 check('账号归一化', acc.userId === 42 && acc.nickname === '某人' && acc.vipType === 1);
+check('账号头像：http 升为 https', acc.avatarUrl === 'https://a');
 check('账号归一化：空输入返回 null', nz.normalizeAccount(null) === null);
 const url = nz.normalizeSongUrl({ url: 'http://x/y.mp3', level: 'standard' });
 check('播放地址：http 升为 https', url.url === 'https://x/y.mp3');
@@ -98,11 +99,23 @@ check('播放地址：无 url 返回 null', nz.normalizeSongUrl({}) === null);
 
 /* 7. 歌单 / 专辑 / 歌手 */
 const pl = nz.normalizePlaylist({ id: 1, name: '歌单', picUrl: 'http://c', trackCount: 12, creator: { nickname: 'n' } });
-check('歌单归一化', pl.cover === 'http://c' && pl.trackCount === 12 && pl.creator.nickname === 'n');
+check('歌单归一化', pl.cover === 'https://c' && pl.trackCount === 12 && pl.creator.nickname === 'n');
 const al = nz.normalizeAlbum({ id: 2, name: '专辑', artists: [{ name: '甲' }], publishTime: 5 });
 check('专辑归一化', al.artistName === '甲' && al.publishTime === 5);
 const ar = nz.normalizeArtist({ id: 3, name: '歌手', img1v1Url: 'http://p' });
-check('歌手归一化', ar.pic === 'http://p' && ar.name === '歌手');
+check('歌手归一化', ar.pic === 'https://p' && ar.name === '歌手');
+
+/* 8. 图片地址规整（真机封面修复的核心） */
+check('图片地址：http 升为 https', nz.imageUrl('http://p1.music.126.net/a.jpg') === 'https://p1.music.126.net/a.jpg');
+check('图片地址：协议相对地址补全', nz.imageUrl('//p1.music.126.net/a.jpg') === 'https://p1.music.126.net/a.jpg');
+check('图片地址：https 原样保留', nz.imageUrl('https://p1.music.126.net/a.jpg') === 'https://p1.music.126.net/a.jpg');
+check('图片地址：空值返回 null', nz.imageUrl(null) === null && nz.imageUrl('') === null && nz.imageUrl('   ') === null);
+check('图片地址：非字符串返回 null', nz.imageUrl(123) === null);
+check('图片地址：追加尺寸参数', nz.imageUrl('http://p/a.jpg', 300) === 'https://p/a.jpg?param=300y300');
+check('图片地址：已有查询串用 & 追加', nz.imageUrl('https://p/a.jpg?x=1', 200) === 'https://p/a.jpg?x=1&param=200y200');
+check('图片地址：不重复追加 param', nz.imageUrl('https://p/a.jpg?param=99y99', 300) === 'https://p/a.jpg?param=99y99');
+check('图片地址：归一化后曲目封面是 https',
+  nz.normalizeTrack({ id: 1, name: 'x', al: { picUrl: 'http://p1.music.126.net/c.jpg' } }).album.picUrl.startsWith('https://'));
 
 console.log(failed ? `\nNORMALIZE: ${failed} 项失败` : '\nNORMALIZE: ALL PASS ✔');
 process.exit(failed ? 1 : 0);

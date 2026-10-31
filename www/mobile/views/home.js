@@ -46,8 +46,13 @@
       type: 'button',
       'aria-label': '播放 ' + first.name + ' · ' + ui.artistNames(first)
     });
-    var img = ui.el('img', { class: 'm-big-cover', alt: first.name + ' 封面' });
-    if (first.album && first.album.picUrl) img.setAttribute('src', first.album.picUrl);
+    var img = ui.cover({
+      url: first.album && first.album.picUrl,
+      alt: first.name + ' 封面',
+      className: 'm-big-cover',
+      size: 400,
+      eager: true
+    });
     big.appendChild(img);
     var info = ui.el('div', { class: 'm-big-info' });
     info.appendChild(ui.el('div', { class: 'm-big-name' }, first.name));

@@ -22,6 +22,43 @@
     client: client,
 
     // ----- Auth -----
+    /**
+     * 手机号 + 密码登录。
+     *
+     * 网易云服务端对密码有两种认法（明文 / MD5），且会随版本变动 ——
+     * 所以这里先试明文，收到「账号或密码错误」(502) 再试一次 MD5。
+     * 两种都失败才判为凭据不对。**密码的编码方式不出内核。**
+     *
+     * 实测：/login/email 与 /login/password 已 404 下线，手机号这条还活着。
+     */
+    cellphoneLogin: function (phone, password) {
+      var pwd = String(password == null ? '' : password);
+      var hashed = mod.md5hex ? mod.md5hex(pwd) : pwd;
+
+      var attempt = function (secret) {
+        return client.weapi('/login/cellphone', {
+          phone: String(phone || ''),
+          password: secret,
+          captcha: '',
+          verifyCode: ''
+        }).then(function (text) {
+          var obj = JSON.parse(text);
+          if (obj && typeof obj.cookie === 'string' && obj.cookie.length) {
+            client.ingestCookieString(obj.cookie);
+          }
+          return obj;
+        });
+      };
+
+      return attempt(pwd).then(function (obj) {
+        if (!obj || obj.code === 200) return obj;
+        if (obj.code !== 502) return obj;   // 不是「账号或密码错误」，不重试
+        return attempt(hashed).then(function (obj2) {
+          if (obj2 && obj2.code === 200) return obj2;
+          return (obj2 && obj2.code === 502) ? obj2 : obj;
+        });
+      });
+    },
     qrKey: function () {
       return weapi('/login/qrcode/unikey', { type: 1 }).then(function (r) { return r.unikey; });
     },
@@ -146,7 +183,9 @@
       return eapi('/song/enhance/player/url/v1', payload).then(function (r) { return r.data; });
     },
     lyric: function (id) {
-      return weapi('/song/lyric', { id: id, lv: -1, kv: -1, tv: -1, rv: -1 });
+      // yv=-1 才会返回「逐字歌词」(yrc)；不带就没有这个字段。
+      // 实测见 .scratch/phone-fixes/spec.md 的取证记录。
+      return weapi('/song/lyric', { id: id, lv: -1, kv: -1, tv: -1, rv: -1, yv: -1 });
     },
     personalFM: function () {
       return weapi('/v1/radio/get').then(function (r) { return r.data || []; });

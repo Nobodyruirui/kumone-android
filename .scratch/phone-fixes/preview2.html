@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<title>Kumone 第二轮效果预览</title>
+<style>
+  html, body { margin: 0; background: #ececef; font: 13px/1.6 system-ui, "Microsoft YaHei", sans-serif; }
+  .stage { width: 390px; height: 844px; margin: 20px auto; border: 10px solid #1b1b1e; border-radius: 38px; overflow: hidden; background: #fff; }
+  iframe { width: 390px; height: 844px; border: 0; display: block; }
+  .cap { text-align: center; color: #555; margin: 0 0 14px; }
+</style>
+</head>
+<body>
+<p class="cap" id="cap">加载中…</p>
+<div class="stage"><iframe id="app" src="/www/index.html"></iframe></div>
+
+<script>
+var scene = (location.search.match(/scene=(\w+)/) || [])[1] || 'mini';
+var cap = document.getElementById('cap');
+var frame = document.getElementById('app');
+
+var REAL_COVER = 'https://p3.music.126.net/9Wn6lXmRkuvM3-6sFWxMlQ==/109951163078575129.jpg';
+
+function fakePlayer(track) {
+  var subs = [];
+  var state = {
+    playing: true, track: track, trackName: track ? track.name : null,
+    artist: track ? track.artists.map(function (a) { return a.name; }).join(' / ') : null,
+    album: track ? track.album.name : null,
+    cover: track ? track.album.picUrl : null,
+    position: 42, duration: 209, quality: 'lossless', requestedQuality: 'lossless',
+    volume: 0.9, repeat: 'off', queueLength: 12, index: 3, playNextLength: 0, error: null
+  };
+  return {
+    state: function () { return state; },
+    subscribe: function (fn) { subs.push(fn); return function () {}; },
+    toggle: function () { state.playing = !state.playing; subs.forEach(function (f) { f(state); }); },
+    seek: function (t) { state.position = t; }, setVolume: function () {}, setQuality: function () {},
+    next: function () {}, prev: function () {}, playQueue: function () {},
+    queueItems: function () { return track ? [track] : []; }
+  };
+}
+
+function makeTracks(n, offset) {
+  var list = [];
+  for (var i = 0; i < n; i++) {
+    list.push({
+      id: (offset || 0) + i,
+      name: '曲目 ' + ((offset || 0) + i + 1),
+      artists: [{ id: 1, name: '某某乐队' }],
+      album: { id: 2, name: '夜行', picUrl: REAL_COVER },
+      durationMS: 209000
+    });
+  }
+  return list;
+}
+
+frame.addEventListener('load', function () {
+  setTimeout(function () {
+    var W = frame.contentWindow;
+    var M = W.Mobile;
+    var doc = W.document;
+
+    if (scene === 'detail') {
+      cap.textContent = '榜单详情：之前点进去是空的，现在有曲目 + 加载更多';
+      var ids = [];
+      for (var i = 1; i <= 120; i++) ids.push({ id: i });
+      M.service.playlistDetail = function () {
+        return Promise.resolve({ ok: true, data: {
+          playlist: {
+            id: 19723756, name: '飙升榜', trackCount: 120,
+            cover: REAL_COVER, creator: { nickname: '网易云' },
+            tracks: makeTracks(50, 1), trackIds: ids
+          },
+          tracks: makeTracks(50, 1), trackIds: ids, total: 120
+        }});
+      };
+      M.service.songDetails = function (list) {
+        return Promise.resolve({ ok: true, data: makeTracks((list || []).length, (list || [])[0]) });
+      };
+      M.nav({ type: 'playlist', id: 19723756, name: '飙升榜' });
+      return;
+    }
+
+    if (scene === 'lyrics') {
+      cap.textContent = '播放页歌词：逐字卡拉 OK，当前行居中';
+      M.service.lyric = function () {
+        return Promise.resolve({ ok: true, data: { lrc: null, tlyric: null, yrc: [
+          '[0,1000](0,1000,0)作词 : 某某',
+          '[1000,3000](1000,1000,0)走在(2000,1000,0)街上',
+          '[4000,3000](4000,1000,0)路灯(5000,1000,0)把夜(6000,1000,0)照亮',
+          '[7000,3000](7000,1000,0)我想(8000,1000,0)把(9000,1000,0)歌唱'
+        ].join('\n') }});
+      };
+      M.player = fakePlayer({
+        id: 1, name: '夜行', artists: [{ id: 1, name: '某某乐队' }],
+        album: { id: 2, name: '夜行', picUrl: REAL_COVER }
+      });
+      M.nav({ type: 'nowplaying' });
+      setTimeout(function () {
+        var btn = doc.querySelector('#m-view .m-np-lyric-btn');
+        if (btn) btn.click();
+      }, 700);
+      return;
+    }
+
+    // mini：主页 + 正在播放（看迷你条的封面与新的进度线）
+    cap.textContent = '迷你播放条：真实封面 + 顶部 1px 淡墨细线（两端内缩）';
+    var miniTrack = {
+      id: 1, name: '催眠剂', artists: [{ id: 1, name: '陈文非' }],
+      album: { id: 2, name: '催眠剂', picUrl: REAL_COVER }
+    };
+    M.player = fakePlayer(miniTrack);
+    M.goTab('home');
+    setTimeout(function () {
+      if (M.shell) {
+        // 迷你条读的是播放快照的形状：cover 在顶层
+        M.shell.setMini({
+          cover: REAL_COVER,
+          name: miniTrack.name,
+          artists: miniTrack.artists
+        });
+        M.shell.setMiniPlaying(true);
+        M.shell.setMiniProgress(0.31);
+      }
+    }, 400);
+  }, 700);
+});
+</script>
+</body>
+</html>

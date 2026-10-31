@@ -127,6 +127,20 @@ async function run() {
     var W = frame.contentWindow;
     var M = W.Mobile;
     var doc = W.document;
+
+    // 歌词走服务层：先换成假服务（先给整行歌词，再给逐字歌词）
+    var lyricMode = 'line';
+    M.service.lyric = function () {
+      if (lyricMode === 'word') {
+        return Promise.resolve({ ok: true, data: {
+          lrc: null, tlyric: null,
+          yrc: '[1000,3000](1000,1000,0)逐(2000,1000,0)字'
+        }});
+      }
+      return Promise.resolve({ ok: true, data: {
+        lrc: '[00:00.00]第一句\n[00:05.00]第二句', tlyric: null, yrc: null
+      }});
+    };
     W.addEventListener('error', function (e) {
       caught.push('iframe error: ' + (e.message || '') + ' @' + (e.filename || '') + ':' + (e.lineno || ''));
     });
@@ -176,6 +190,45 @@ async function run() {
     ok('有歌名', t && t.textContent === '播放页曲目', t ? t.textContent : '');
     ok('有艺人', a && a.textContent === '甲乐队', a ? a.textContent : '');
     ok('有专辑名', al && al.textContent === '播放页专辑', al ? al.textContent : '');
+
+    /* ------------------------------- 2b. 歌词面板 */
+
+    await wait(400);
+    ok('有歌词面板', doc.querySelectorAll('#m-view .m-lyrics').length === 1);
+    ok('整行歌词渲染成两行', doc.querySelectorAll('#m-view .m-lyric-line').length === 2,
+      '行数=' + doc.querySelectorAll('#m-view .m-lyric-line').length);
+
+    var lyricBtn = doc.querySelector('#m-view .m-np-lyric-btn');
+    ok('有「歌词」按钮', !!lyricBtn);
+    lyricBtn.click();
+    await wait(200);
+    ok('切到歌词视图', doc.querySelector('#m-view .m-np-live').classList.contains('m-lyrics-mode'));
+    ok('歌词面板此时可见',
+      W.getComputedStyle(doc.querySelector('#m-view .m-lyrics')).display !== 'none');
+    ok('歌词按钮标记为按下', lyricBtn.getAttribute('aria-pressed') === 'true');
+
+    // 切回封面
+    lyricBtn.click();
+    await wait(200);
+    ok('能切回封面视图', !doc.querySelector('#m-view .m-np-live').classList.contains('m-lyrics-mode'));
+
+    // 换成逐字歌词：换一首（新的曲目 id）才会重新取歌词
+    lyricMode = 'word';
+    var st = M.player.state();
+    var origTrack = st.track;
+    st.track = {
+      id: 77, name: '逐字曲目', durationMS: 100000,
+      artists: [{ id: 1, name: '甲乐队' }],
+      album: { id: 2, name: '播放页专辑', picUrl: '' }
+    };
+    M.player.toggle();
+    await wait(400);
+    ok('逐字歌词渲染成词级片段', doc.querySelectorAll('#m-view .m-lyric-word').length === 2,
+      '词数=' + doc.querySelectorAll('#m-view .m-lyric-word').length);
+    // 还原：曲目与播放状态都回到原样，别影响后面的断言
+    st.track = origTrack;
+    M.player.toggle();
+    await wait(300);
 
     /* ------------------------------- 3. 快照里的语义名与 ref */
 

@@ -30,6 +30,16 @@ body {
 
 img { -webkit-user-drag: none; }
 
+/* 封面统一兜底：取不到时用占位图，不显示浏览器默认的裂图
+   淡入：图片解码完成再显形，避免「一块块蹦出来」 */
+.m-cover {
+  background: var(--wash);
+  opacity: 0;
+  transition: opacity .25s ease;
+}
+.m-cover.is-loaded { opacity: 1; }
+.m-cover.is-missing { opacity: .9; }
+
 /* ------------------------------------------------------------- 布局 */
 
 #m-app {
@@ -43,13 +53,30 @@ img { -webkit-user-drag: none; }
   min-height: 0;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  /* 转场时的「上一层」要相对这里定位 */
+  position: relative;
   /* 给迷你播放条与底部导航让位 */
   padding-bottom: calc(var(--mini-h) + var(--nav-h) + var(--safe-b) + 20px);
 }
 
 #m-view {
   padding: 0 16px 20px;
+  position: relative;
+  z-index: 1;
 }
+
+/* 转场时的「上一层」：旧内容搬到这里做退场动画 */
+#m-view-prev {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  visibility: hidden;
+  /* 与 #m-view 同 padding，旧页面在动画里不会横向跳一下 */
+  padding: 0 16px 20px;
+}
+#m-view-prev.is-active { visibility: visible; }
 
 /* ------------------------------------------------- 吸顶栏（大 → 小） */
 
@@ -198,18 +225,19 @@ img { -webkit-user-drag: none; }
   overflow: hidden;
 }
 
-/* 顶部极细进度线：播放状态是唯一允许用色的地方之外的黑 */
+/* 顶部进度线：1px 淡墨细线，两端内缩
+   （原先是 2px 纯黑顶在卡片圆角上，真机上是道粗黑杠，像设计缺陷） */
 #m-mini-line {
   position: absolute;
-  left: 0; right: 0; top: 0;
-  height: 2px;
+  left: 14px; right: 14px; top: 0;
+  height: 1px;
   background: var(--wash);
 }
 #m-mini-line > i {
   display: block;
   height: 100%;
   width: 0;
-  background: var(--ink);
+  background: var(--ink-2);
   transition: width 0.2s linear;
 }
 
@@ -527,10 +555,143 @@ body.m-np #m-main { padding-bottom: 24px; }
 
 .m-list { list-style: none; margin: 0; padding: 0; }
 
+/* 长列表（歌单 100 首）不参与屏幕外的渲染 —— 滚动与转场都更顺 */
+.m-track {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 58px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* 行内「+」：与主按钮平级（不能嵌套在按钮里） */
+.m-track-add {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: 17px;
+  line-height: 1;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.m-track-add:active { background: var(--wash); color: var(--ink); }
+
+/* 视图里的动作行（收藏专辑 / 新建歌单） */
+.m-action-row {
+  display: flex;
+  gap: 8px;
+  margin: 12px 0 4px;
+}
+.m-btn.is-on {
+  border-color: var(--line-strong);
+  font-weight: var(--fw-title);
+}
+
+/* --------------------------------------------------------- 底部抽屉 */
+
+.m-sheet-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: flex;
+  align-items: flex-end;
+  background: rgba(10, 10, 10, 0.26);
+  opacity: 0;
+  transition: opacity .22s ease;
+}
+.m-sheet-mask.is-open { opacity: 1; }
+
+.m-sheet {
+  width: 100%;
+  max-height: 78vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+  border-radius: var(--radius-card) var(--radius-card) 0 0;
+  box-shadow: var(--shadow-pop);
+  padding: 10px 16px calc(18px + var(--safe-b));
+  transform: translate3d(0, 100%, 0);
+  transition: transform .28s cubic-bezier(.32, .72, 0, 1);
+  will-change: transform;
+}
+.m-sheet-mask.is-open .m-sheet { transform: translate3d(0, 0, 0); }
+
+.m-sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 0 10px;
+}
+.m-sheet-title { font-size: var(--fs-sub); font-weight: var(--fw-title); }
+.m-sheet-close {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  background: none;
+  color: var(--ink-2);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: var(--radius-pill);
+  padding: 0;
+}
+.m-sheet-close:active { background: var(--wash); }
+
+.m-sheet-list { display: flex; flex-direction: column; gap: 2px; }
+.m-sheet-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 9px 4px;
+  border: 0;
+  background: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  font-size: var(--fs-body);
+  color: var(--ink);
+}
+.m-sheet-item:active { background: var(--wash); }
+.m-sheet-cover {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+  flex-shrink: 0;
+  background: var(--wash);
+}
+.m-sheet-item-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.m-sheet-create {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.m-sheet-create .m-field { flex: 1 1 auto; margin: 0; }
+.m-sheet-create .m-btn { flex-shrink: 0; }
+
 .m-track-btn {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex: 1 1 auto;
+  min-width: 0;
   width: 100%;
   padding: 9px 0;
   border: none;
@@ -655,6 +816,52 @@ body.m-np #m-main { padding-bottom: 24px; }
 }
 
 /* -------------------------------------------------------- 登录视图 */
+
+/* 登录方式 Tab（账号登录 / 扫码登录） */
+.m-tabs {
+  display: flex;
+  gap: 4px;
+  margin: 14px 0 16px;
+  border-bottom: 1px solid var(--line);
+}
+.m-tab-btn {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  background: none;
+  padding: 9px 2px;
+  margin-right: 16px;
+  font-family: inherit;
+  font-size: var(--fs-sub);
+  color: var(--ink-2);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.m-tab-btn.is-active {
+  color: var(--ink);
+  font-weight: var(--fw-title);
+  border-bottom-color: var(--line-strong);
+}
+
+/* 表单 */
+.m-field {
+  display: block;
+  width: 100%;
+  margin: 0 0 10px;
+  padding: 12px 14px;
+  font-family: inherit;
+  font-size: var(--fs-body);
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.m-field:focus { border-color: var(--line-strong); }
+.m-field::placeholder { color: var(--ink-3); }
 
 .m-login-qr {
   display: flex;
@@ -841,6 +1048,77 @@ body.m-focus #m-main { padding-bottom: 24px; }
   background: var(--surface-2);
   margin-top: 14px;
 }
+
+/* 舞台：封面与歌词面板叠在一起，点封面切到歌词 */
+.m-np-stage {
+  position: relative;
+  margin-top: 14px;
+}
+.m-np-cover-btn {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+.m-np-cover-btn .m-np-cover { margin-top: 0; }
+
+/* 歌词面板 */
+.m-lyrics {
+  display: none;
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 10% 6px 45%;
+  border-radius: var(--radius-card);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  scroll-behavior: smooth;
+}
+.m-np-live.m-lyrics-mode .m-lyrics { display: block; }
+.m-np-live.m-lyrics-mode .m-np-cover-btn { visibility: hidden; }
+
+.m-lyric-line {
+  padding: 7px 4px;
+  font-size: var(--fs-body);
+  color: var(--ink-3);
+  transition: color var(--dur) var(--ease), opacity var(--dur) var(--ease);
+}
+.m-lyric-line.is-current { color: var(--ink); font-weight: var(--fw-title); }
+.m-lyric-tr {
+  font-size: var(--fs-note);
+  font-weight: var(--fw-note);
+  font-style: italic;
+  color: var(--ink-2);
+  margin-top: 2px;
+}
+
+/* 逐字扫光：--p 是这个字已经唱到的比例
+   已唱部分用重墨，未唱部分用弱墨 —— 整行都看得见，只是分前后 */
+.m-lyric-word {
+  --p: 0%;
+  background-image: linear-gradient(90deg,
+    var(--ink) 0 var(--p),
+    var(--ink-3) var(--p) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.m-lyric-line:not(.is-current) .m-lyric-word { color: inherit; }
+
+.m-lyrics-note {
+  padding: 10px 4px;
+  font-size: var(--fs-note);
+  font-weight: var(--fw-note);
+  font-style: italic;
+  color: var(--ink-2);
+}
+.m-np-lyric-btn[aria-pressed="true"] {
+  border-color: var(--line-strong);
+  font-weight: var(--fw-title);
+}
 .m-np-title {
   margin-top: 18px;
   font-size: var(--fs-display);
@@ -938,12 +1216,17 @@ body.m-focus #m-main { padding-bottom: 24px; }
   font-size: 22px;
 }
 
-/* 音量 / 音质 / 队列 */
+/* 音量 / 音质 / 队列 / 歌词 / 播放模式 / 加入歌单 */
 .m-np-aux {
   display: flex;
   align-items: center;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 8px;
   margin-top: 12px;
+}
+.m-np-aux > .m-btn {
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .m-np-aux-label {
   font-size: var(--fs-note);

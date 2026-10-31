@@ -27,6 +27,7 @@
   var CODES = {
     KUMONE_NEED_LOGIN:       { kind: 'permanent', title: '需要登录' },
     KUMONE_AUTH_EXPIRED:     { kind: 'permanent', title: '登录已过期' },
+    KUMONE_LOGIN_FAILED:     { kind: 'permanent', title: '账号或密码错误' },
     KUMONE_NETWORK:          { kind: 'transient', title: '网络不可用' },
     KUMONE_TIMEOUT:          { kind: 'transient', title: '请求超时' },
     KUMONE_DECODE_FAILED:    { kind: 'transient', title: '响应解析失败' },

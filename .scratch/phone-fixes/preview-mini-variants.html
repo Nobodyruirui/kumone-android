@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<title>迷你播放条 · 进度线方案对比</title>
+<link rel="stylesheet" href="/www/mobile/css/tokens.css">
+<link rel="stylesheet" href="/www/mobile/css/shell.css">
+<style>
+  body { background: #e9e9ee; font: 13px/1.6 system-ui, "Microsoft YaHei", sans-serif; padding: 18px; }
+  .row { margin: 0 auto 26px; max-width: 400px; background: #f4f4f6; border-radius: 18px; padding: 14px 12px 12px; }
+  .tag { font-weight: 700; font-size: 13px; margin-bottom: 2px; }
+  .desc { color: #6b6b73; font-size: 12px; margin-bottom: 10px; }
+  .demo { position: relative; }
+  .demo #m-mini {
+    position: relative; left: auto; right: auto; bottom: auto; top: auto;
+  }
+  /* 变体 B：进度线在卡片底部 */
+  .vB #m-mini-line { top: auto; bottom: 0; left: 14px; right: 14px; height: 1px; background: transparent; }
+  .vB #m-mini-line > i { background: var(--ink-2); }
+  /* 变体 A：顶部 1px 淡墨 + 两端内缩 */
+  .vA #m-mini-line { height: 1px; background: transparent; left: 14px; right: 14px; }
+  .vA #m-mini-line > i { background: var(--ink-2); }
+  /* 变体 C：环形进度（画在播放按钮外圈） */
+  .vC #m-mini-line { display: none; }
+  .vC #m-mini-play { position: relative; }
+  .vC #m-mini-play::after {
+    content: ''; position: absolute; inset: -4px; border-radius: 50%;
+    border: 1.5px solid var(--line); border-top-color: var(--ink);
+    transform: rotate(38deg);
+  }
+  /* 变体 D：无进度线 */
+  .vD #m-mini-line { display: none; }
+  .note { max-width: 400px; margin: 0 auto 24px; color: #6b6b73; font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="note">同一套真实样式（tokens.css + shell.css）下的四种迷你播放条进度方案，播放进度 62%：</div>
+
+<div class="row vA">
+  <div class="tag">A · 顶部 1px 淡墨细线（两端内缩）</div>
+  <div class="desc">改动最小：线从 2px 纯黑改成 1px 半透明墨色，且不顶到卡片圆角</div>
+  <div class="demo"><section id="m-mini" class="vA"><div id="m-mini-line"><i style="width:62%"></i></div>
+    <button id="m-mini-open"><img id="m-mini-cover" alt=""><span id="m-mini-text"><span id="m-mini-title">催眠剂</span><span id="m-mini-artist">陈文非</span></span></button>
+    <button id="m-mini-play">▶</button></section></div>
+</div>
+
+<div class="row vB">
+  <div class="tag">B · 进度线移到卡片底沿</div>
+  <div class="desc">线不再压在顶边，改为底部 1px 内缩线，像「读到哪里」</div>
+  <div class="demo"><section id="m-mini" class="vB"><div id="m-mini-line"><i style="width:62%"></i></div>
+    <button id="m-mini-open"><img id="m-mini-cover" alt=""><span id="m-mini-text"><span id="m-mini-title">催眠剂</span><span id="m-mini-artist">陈文非</span></span></button>
+    <button id="m-mini-play">▶</button></section></div>
+</div>
+
+<div class="row vC">
+  <div class="tag">C · 播放按钮外圈环形进度</div>
+  <div class="desc">不再有横线；进度画成播放键外圈的圆弧，进度感最强的方案</div>
+  <div class="demo"><section id="m-mini" class="vC"><div id="m-mini-line"><i style="width:62%"></i></div>
+    <button id="m-mini-open"><img id="m-mini-cover" alt=""><span id="m-mini-text"><span id="m-mini-title">催眠剂</span><span id="m-mini-artist">陈文非</span></span></button>
+    <button id="m-mini-play">▶</button></section></div>
+</div>
+
+<div class="row vD">
+  <div class="tag">D · 迷你条不显示进度</div>
+  <div class="desc">最克制：迷你条只留封面 / 歌名 / 播放键，进度只在全屏播放页出现</div>
+  <div class="demo"><section id="m-mini" class="vD"><div id="m-mini-line"><i style="width:62%"></i></div>
+    <button id="m-mini-open"><img id="m-mini-cover" alt=""><span id="m-mini-text"><span id="m-mini-title">催眠剂</span><span id="m-mini-artist">陈文非</span></span></button>
+    <button id="m-mini-play">▶</button></section></div>
+</div>
+
+<script>
+var COVER = 'https://p3.music.126.net/9Wn6lXmRkuvM3-6sFWxMlQ==/109951163078575129.jpg?param=96y96';
+document.querySelectorAll('#m-mini-cover').forEach(function (img) {
+  img.setAttribute('src', COVER);
+  img.addEventListener('error', function () {
+    img.setAttribute('src', 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="10" fill="#e9e9ee"/>' +
+      '<path d="M27 44V21l15-3v20" fill="none" stroke="#b6b6c0" stroke-width="2.4" stroke-linecap="round"/>' +
+      '<circle cx="23.5" cy="45" r="4.2" fill="#b6b6c0"/><circle cx="38.5" cy="42" r="4.2" fill="#b6b6c0"/></svg>'));
+  });
+});
+</script>
+</body>
+</html>

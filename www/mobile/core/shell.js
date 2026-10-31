@@ -68,7 +68,7 @@
     bar.innerHTML =
       '<div id="m-mini-line" aria-hidden="true"><i></i></div>' +
       '<button id="m-mini-open" type="button" aria-label="打开播放页">' +
-      '<img id="m-mini-cover" alt="">' +
+      '<img id="m-mini-cover" class="m-cover" alt="">' +
       '<span id="m-mini-text">' +
       '<span id="m-mini-title">未在播放</span>' +
       '<span id="m-mini-artist"></span>' +
@@ -81,6 +81,13 @@
       open.addEventListener('click', function () {
         M.nav({ type: 'nowplaying' });
       });
+    }
+
+    // 封面加载失败时顶上占位图，不显示浏览器默认的裂图
+    var miniCover = bar.querySelector('#m-mini-cover');
+    if (miniCover) {
+      if (M.ui && M.ui.watchCover) M.ui.watchCover(miniCover);
+      miniCover.setAttribute('loading', 'eager');
     }
 
     var playBtn = bar.querySelector('#m-mini-play');
@@ -151,14 +158,13 @@
     var artist = document.getElementById('m-mini-artist');
     if (!cover) return;
     if (!track) {
-      cover.removeAttribute('src');
+      M.ui.setCover(cover, null, 96);
       cover.setAttribute('alt', '');
       title.textContent = '未在播放';
       artist.textContent = '';
       return;
     }
-    if (track.cover) cover.setAttribute('src', track.cover);
-    else cover.removeAttribute('src');
+    M.ui.setCover(cover, track.cover, 96);
     cover.setAttribute('alt', track.name + ' 封面');
     title.textContent = track.name;
     // 归一化后的曲目里艺人是数组；播放状态快照里是字符串，两种都兜住
@@ -198,8 +204,7 @@
       'aria-label': '账号 ' + who
     });
     if (account.avatarUrl) {
-      var img = el('img', { class: 'm-account-avatar', alt: who + ' 头像' });
-      img.setAttribute('src', account.avatarUrl);
+      var img = M.ui.cover({ url: account.avatarUrl, alt: who + ' 头像', className: 'm-account-avatar', size: 96, eager: true });
       b.appendChild(img);
     } else {
       b.appendChild(el('span', { class: 'm-account-dot', 'aria-hidden': 'true' }));
