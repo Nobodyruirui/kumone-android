@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<title>Kumone 我的入口自检</title>
+<style>
+  body { font: 13px/1.6 system-ui, sans-serif; margin: 20px; }
+  iframe { width: 390px; height: 760px; border: 1px solid #ddd; }
+  pre { background: #0a0a0a; color: #e8e8ea; padding: 12px; border-radius: 10px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<!--
+  自检探针：导航改造后的信息架构（phone-fixes-4 / issues 02，方案 B）。
+
+  用户报过两条：
+    · 资料库放一级菜单，一直点错
+    · 找不到歌单和收藏在哪
+
+  方案 B：
+    · 底部导航只留 主页 / 广播 / 搜索
+    · 顶栏左上角**常驻**一个「我的」图标按钮，点开是「我的」抽屉
+    · 顶栏右上角账号胶囊 → 退出登录（带确认框）
+
+  断言：
+    1. 底部导航只有三键，没有「资料库」
+    2. 根页面左上角有常驻的「我的」入口（用过也在）
+    3. 点它开「我的」抽屉，里面有「我的歌单」与「收藏的专辑」
+    4. 抽屉里点「我的歌单」→ 进我的歌单视图，抽屉自动收起
+    5. 进二级页后左上角让位给返回箭头
+    6. 账号胶囊弹退出登录确认框；抽屉里也有「退出登录」
+    7. 未登录时右上角有「登录」入口
+-->
+<iframe id="app" src="/www/index.html"></iframe>
+<pre id="result" data-result="PENDING">PENDING</pre>
+
+<script>
+var out = document.getElementById('result');
+var failures = [];
+function ok(name, cond, extra) {
+  if (!cond) failures.push(name + (extra ? ' :: ' + extra : ''));
+}
+function finish() {
+  var okAll = failures.length === 0;
+  out.setAttribute('data-result', okAll ? 'PASS' : 'FAIL');
+  out.textContent = (okAll ? 'PASS ' : 'FAIL ') +
+    (okAll ? '「我的」入口自检通过' : ('失败项：' + failures.join('；')));
+}
+function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+function findRef(tree, role, name) {
+  var re = new RegExp(role + ' "' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '" \\[ref=(@\\d+)');
+  var m = tree.match(re);
+  return m ? m[1] : null;
+}
+
+var ACCOUNT = { userId: 77, nickname: '测试昵称', avatarUrl: '', vipType: 1 };
+var PLAYLIST = { id: 22, name: '我的歌单一', cover: '', creator: { nickname: '我' }, playCount: 10, trackCount: 1 };
+
+function fakeService(loggedIn) {
+  var calls = [];
+  var base = {
+    calls: calls,
+    isLoggedIn: function () { return Promise.resolve(loggedIn !== false); },
+    account: function () {
+      if (loggedIn === false) return Promise.resolve({ ok: false, code: 'KUMONE_NEED_LOGIN' });
+      return Promise.resolve({ ok: true, data: ACCOUNT });
+    },
+    myPlaylists: function () { return Promise.resolve({ ok: true, data: [PLAYLIST] }); },
+    likedSongs: function () { return Promise.resolve({ ok: true, data: [] }); },
+    likedAlbums: function () { return Promise.resolve({ ok: true, data: [] }); },
+    cloudSongs: function () { return Promise.resolve({ ok: true, data: [] }); },
+    playRecords: function () { return Promise.resolve({ ok: true, data: [] }); },
+    logout: function () { calls.push({ channel: 'logout' }); return Promise.resolve({ ok: true, data: true }); }
+  };
+  return base;
+}
+
+var frame = document.getElementById('app');
+frame.addEventListener('load', function () { setTimeout(run, 800); });
+
+async function run() {
+  try {
+    var W = frame.contentWindow;
+    var M = W.Mobile;
+    var doc = W.document;
+
+    M.service = fakeService();
+    M.actions.refreshAccount();
+    await wait(400);
+
+    /* ------------------------------- 1. 底部导航只有三键 */
+
+    var tabs = doc.querySelectorAll('#m-nav .m-tab');
+    ok('底部导航是三键', tabs.length === 3, '实际 ' + tabs.length);
+    var labels = Array.prototype.map.call(tabs, function (b) { return b.getAttribute('aria-label'); });
+    ok('三键是 主页/广播/搜索', labels.join(',') === '主页,广播,搜索', labels.join(','));
+    ok('一级菜单里没有「资料库」', labels.indexOf('资料库') < 0, labels.join(','));
+
+    /* ------------------------------- 2. 左上角常驻「我的」入口 */
+
+    var chip = doc.getElementById('m-mine');
+    ok('顶栏左上角有「我的」入口', !!chip);
+    ok('根页面上它可见', chip && chip.classList.contains('visible'),
+      chip ? chip.className : '（无）');
+    ok('快照里能拿到它的 ref', !!findRef(M.snapshot().tree, 'button', '我的歌单与收藏'));
+
+    // 位置：必须贴着屏幕左边缘。
+    // 早先那个**看不见**的返回箭头还占着位置（visibility:hidden），
+    // 把按钮顶到了离边缘约 52px —— 用户说「位置不符合人类审美」。
+    var backEl = doc.getElementById('m-back');
+    ok('看不见的返回箭头不占位', backEl && W.getComputedStyle(backEl).display === 'none',
+       backEl ? W.getComputedStyle(backEl).display : '（无）');
+    var left = chip ? chip.getBoundingClientRect().left : -1;
+    ok('「我的」按钮贴着左边缘（离左边 < 20px）', left >= 0 && left < 20, 'left=' + left);
+
+    /* ------------------------------- 3. 点它 → 「我的」抽屉 */
+
+    chip.click();
+    await wait(500);
+    ok('「我的」抽屉开了', doc.querySelectorAll('.m-sheet').length === 1,
+      '抽屉数 ' + doc.querySelectorAll('.m-sheet').length);
+    ok('抽屉里有「我的歌单」', !!doc.querySelector('.m-sheet [aria-label="我的歌单"]'));
+    ok('抽屉里有「收藏的专辑」', !!doc.querySelector('.m-sheet [aria-label="收藏的专辑"]'));
+    ok('抽屉里有「退出登录」', !!doc.querySelector('.m-sheet [aria-label="退出登录"]'));
+
+    /* ------------------------------- 4. 抽屉里点「我的歌单」 */
+
+    var mineRef = findRef(M.snapshot().tree, 'button', '我的歌单');
+    ok('抽屉里的「我的歌单」有 ref', !!mineRef);
+    if (mineRef) {
+      M.act(mineRef, 'click');
+      await wait(600);
+      ok('进到我的歌单视图', M.state.view.type === 'myplaylists', M.state.view.type);
+      ok('抽屉收起了', doc.querySelectorAll('.m-sheet').length === 0,
+        '抽屉数 ' + doc.querySelectorAll('.m-sheet').length);
+    }
+
+    /* ------------------------------- 5. 二级页：左上角让位给返回箭头 */
+
+    var chip2 = doc.getElementById('m-mine');
+    var back = doc.getElementById('m-back');
+    ok('二级页上「我的」入口让位', chip2 && !chip2.classList.contains('visible'),
+      chip2 ? chip2.className : '（无）');
+    ok('二级页上返回箭头出现', back && back.classList.contains('visible'),
+      back ? back.className : '（无）');
+
+    /* ------------------------------- 6. 回来以后入口还在（常驻） */
+
+    M.back();
+    await wait(600);
+    var chip3 = doc.getElementById('m-mine');
+    ok('回到根页面后「我的」入口还在', chip3 && chip3.classList.contains('visible'),
+      chip3 ? chip3.className : '（无）');
+
+    /* ------------------------------- 7. 账号胶囊 → 登录页（右上角只用来登录） */
+
+    var accBtn = doc.getElementById('m-account');
+    ok('顶栏有账号入口', !!accBtn);
+    if (accBtn) {
+      accBtn.click();
+      await wait(700);
+      ok('账号胶囊开的是登录页', M.state.view.type === 'login', M.state.view.type);
+      ok('登录页显示「已登录」',
+         doc.getElementById('m-view').textContent.indexOf('已登录') >= 0,
+         doc.getElementById('m-view').textContent.slice(0, 100));
+      ok('登录页里有「退出登录」', !!doc.querySelector('#m-view [aria-label="退出登录"]'));
+      // 回主页，继续下一项
+      M.back();
+      await wait(500);
+    }
+
+    /* ------------------------------- 8. 未登录时右上角仍有「登录」入口 */
+
+    M.service = fakeService(false);
+    M.actions.refreshAccount();
+    await wait(500);
+    var loginBtn = doc.getElementById('m-login');
+    ok('未登录时右上角有「登录」入口', !!loginBtn);
+    ok('未登录时没有假账号', !doc.getElementById('m-account'));
+    if (loginBtn) {
+      loginBtn.click();
+      await wait(500);
+      ok('点「登录」进登录页', M.state.view.type === 'login', M.state.view.type);
+    }
+
+    finish();
+  } catch (e) {
+    failures.push('异常：' + (e && e.message ? e.message : String(e)) +
+      ' @ ' + ((e && e.stack) ? String(e.stack).split('\n').slice(0, 3).join(' | ') : ''));
+    finish();
+  }
+}
+</script>
+</body>
+</html>

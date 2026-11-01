@@ -137,12 +137,12 @@
     frag.appendChild(body);
 
     body.setAttribute('aria-busy', 'true');
-    body.appendChild(ui.skeleton(4, '加载中'));
+    body.appendChild(ui.skeletonDetail());
 
     function retry() {
       body.textContent = '';
       body.setAttribute('aria-busy', 'true');
-      body.appendChild(ui.skeleton(4, '加载中'));
+      body.appendChild(ui.skeletonDetail());
       load();
     }
 
@@ -263,7 +263,10 @@
   Object.keys(SOURCES).forEach(function (type) {
     M.views[type] = {
       title: function (view) { return (view && view.name) || '详情'; },
-      render: function (view) { return build(type, view || {}); }
+      render: function (view) { return build(type, view || {}); },
+      // 详情页离开后**不销毁**：返回时直接还原（不重新拉数据、不退回骨架屏）。
+      // 这个页面没有订阅也没有轮询 —— 还原后不需要重新接线，安全。
+      cacheable: true
     };
   });
 })(window.Mobile = window.Mobile || {});

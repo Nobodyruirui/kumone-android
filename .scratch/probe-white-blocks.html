@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<title>Kumone 转场白块取证</title>
+<style>
+  html, body { margin: 0; padding: 0; background: #d8d8dd; }
+  #app { width: 390px; height: 844px; border: 0; display: block; }
+  #report { position: fixed; right: 8px; top: 8px; width: 420px; max-height: 800px;
+            overflow: auto; background: #0a0a0a; color: #e8e8ea; font: 12px/1.5 monospace;
+            padding: 10px; z-index: 9; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<iframe id="app" src="/www/index.html"></iframe>
+<pre id="report">…</pre>
+<script>
+// 取证探针：把转场**定格**在中间那一帧，看清楚「白色方块」到底是什么。
+// ?mode=nav    —— 前进转场（点进详情页）
+// ?mode=swipe  —— 边缘左滑手势
+// ?t=120       —— 定格在第几毫秒
+var report = document.getElementById('report');
+if (location.search.indexOf('clean=1') >= 0) report.style.display = 'none';
+var logs = [];
+var frame = document.getElementById('app');
+var mode = (location.search.match(/mode=(\w+)/) || [])[1] || 'nav';
+var at = Number((location.search.match(/t=(\d+)/) || [])[1] || 140);
+
+var TRACK = { id: 1, name: '黑白', artists: [{ id: 9, name: '方大同' }],
+  album: { id: 3, name: '黑白', picUrl: '' }, durationMS: 210000 };
+
+function fakeService() {
+  return {
+    isLoggedIn: function () { return Promise.resolve(true); },
+    account: function () { return Promise.resolve({ ok: true, data: { userId: 77, nickname: 'N', avatarUrl: '', vipType: 1 } }); },
+    // 故意慢：让详情页停在骨架屏上
+    playlistDetail: function (id) {
+      return new Promise(function (res) {
+        setTimeout(function () {
+          res({ ok: true, data: { playlist: { id: id, name: '歌单' + id, cover: '', trackCount: 2,
+            creator: { nickname: 'x' } },
+            tracks: [TRACK, TRACK], trackIds: [], total: 2 } });
+        }, 4000);
+      });
+    },
+    artist: function (id) {
+      return new Promise(function (res) {
+        setTimeout(function () {
+          res({ ok: true, data: { artist: { id: id, name: '方大同', pic: '', albumSize: 2, musicSize: 2 },
+            hotSongs: [TRACK] } });
+        }, 4000);
+      });
+    },
+    dailyRecommend: function () { return Promise.resolve({ ok: true, data: [] }); },
+    recommendedPlaylists: function () { return Promise.resolve({ ok: true, data: [] }); },
+    toplists: function () { return Promise.resolve({ ok: true, data: [] }); },
+    topArtists: function () { return Promise.resolve({ ok: true, data: [] }); },
+    newAlbums: function () { return Promise.resolve({ ok: true, data: [] }); }
+  };
+}
+
+function touch(el, type, x, y) {
+  var t = new frame.contentWindow.Touch({ identifier: 1, target: el, clientX: x, clientY: y, pageX: x, pageY: y });
+  var ev = new frame.contentWindow.TouchEvent(type, {
+    touches: type === 'touchend' ? [] : [t], targetTouches: type === 'touchend' ? [] : [t],
+    changedTouches: [t], bubbles: true, cancelable: true
+  });
+  el.dispatchEvent(ev);
+}
+
+/** 找出「看起来是白色方块」的元素：背景接近纯白、面积够大。 */
+function whiteBlocks(W) {
+  var doc = W.document;
+  var out = [];
+  var all = doc.querySelectorAll('#m-app *, #m-view-prev *');
+  for (var i = 0; i < all.length; i++) {
+    var el = all[i];
+    var r = el.getBoundingClientRect();
+    if (r.width < 60 || r.height < 60) continue;
+    if (r.bottom < 0 || r.top > W.innerHeight) continue;
+    var cs = W.getComputedStyle(el);
+    if (cs.display === 'none' || cs.visibility === 'hidden') continue;
+    var op = parseFloat(cs.opacity);
+    if (!isNaN(op) && op < 0.05) continue;
+    var bg = cs.backgroundColor;
+    var m = bg.match(/\d+/g);
+    if (!m || m.length < 3) continue;
+    var isWhite = Number(m[0]) >= 250 && Number(m[1]) >= 250 && Number(m[2]) >= 250;
+    if (!isWhite) continue;
+    out.push({
+      sel: el.tagName.toLowerCase() + (el.id ? '#' + el.id : '') +
+        (el.className && typeof el.className === 'string' ? '.' + el.className.trim().split(/\s+/).join('.') : ''),
+      box: Math.round(r.width) + 'x' + Math.round(r.height) + ' @' + Math.round(r.left) + ',' + Math.round(r.top),
+      opacity: cs.opacity,
+      transform: cs.transform.slice(0, 40)
+    });
+  }
+  return out;
+}
+
+frame.addEventListener('load', function () {
+  setTimeout(function () {
+    var W = frame.contentWindow;
+    var M = W.Mobile;
+    M.service = fakeService();
+    M.actions.refreshAccount();
+    M.state.view = { type: 'home' };
+    M.state.history = [];
+    M.render();
+
+    setTimeout(function () {
+      if (mode === 'swipe') {
+        // 先进一个详情页（会被缓存），再进第二个 → 左滑时底下就是第一个
+        M.nav({ type: 'playlist', id: 1111, name: '底下的那一页' });
+        setTimeout(function () {
+          M.nav({ type: 'artist', id: 6452, name: '方大同' });
+          setTimeout(function () {
+            var main = W.document.getElementById('m-main');
+            touch(main, 'touchstart', 6, 400);
+            touch(main, 'touchmove', 90, 402);
+            touch(main, 'touchmove', 190, 404);
+            freeze();
+          }, 900);
+        }, 900);
+      } else {
+        M.nav({ type: 'artist', id: 6452, name: '方大同' });
+        setTimeout(freeze, 60);
+      }
+    }, 500);
+  }, 600);
+
+  function freeze() {
+    var W = frame.contentWindow;
+    // 定格：把正在跑的动画全部暂停
+    try {
+      var anims = W.document.getAnimations();
+      anims.forEach(function (a) { a.pause(); });
+      logs.push('暂停动画数: ' + anims.length);
+    } catch (e) { logs.push('getAnimations 失败: ' + e.message); }
+
+    var blocks = whiteBlocks(W);
+    logs.push('mode=' + mode + ' 白色大方块元素 ' + blocks.length + ' 个:');
+    blocks.slice(0, 24).forEach(function (b) {
+      logs.push('  · ' + b.sel + '  ' + b.box + '  op=' + b.opacity + '  ' + b.transform);
+    });
+
+    // 转场期间 #m-view / #m-view-prev 的状态
+    var view = W.document.getElementById('m-view');
+    var prev = W.document.getElementById('m-view-prev');
+    logs.push('#m-view: transform=' + W.getComputedStyle(view).transform + ' opacity=' + W.getComputedStyle(view).opacity);
+    if (prev) {
+      logs.push('#m-view-prev: class=' + prev.className + ' transform=' + W.getComputedStyle(prev).transform +
+        ' opacity=' + W.getComputedStyle(prev).opacity + ' bg=' + W.getComputedStyle(prev).backgroundColor +
+        ' children=' + prev.children.length);
+    }
+    var skel = W.document.querySelectorAll('#m-view .m-skeleton, #m-view-prev .m-skeleton');
+    logs.push('骨架屏元素: ' + skel.length);
+    for (var i = 0; i < skel.length && i < 3; i++) {
+      var cs = W.getComputedStyle(skel[i]);
+      logs.push('  骨架 bg=' + cs.backgroundColor + ' img=' + cs.backgroundImage.slice(0, 60));
+    }
+    report.textContent = logs.join('\n');
+  }
+});
+</script>
+</body>
+</html>

@@ -133,6 +133,19 @@ async function run() {
 
     ok('进入搜索页', M.state.view.type === 'search', M.state.view.type);
 
+    // 回归：元素被当字符串塞进 innerHTML 时会渲染成「[object HTMLButtonElement]」
+    // （真机实拍）。这里断言页面上没有这种字符串，且热搜 chip 真的挂上去了。
+    var viewText = doc.getElementById('m-view').textContent;
+    ok('页面上没有 [object ...] 这种字符串', viewText.indexOf('[object') < 0,
+       viewText.slice(0, 160));
+    ok('默认热搜 chip 真的渲染出来了',
+       !!doc.querySelector('#m-view .m-suggest-chip'),
+       'chip 数 ' + doc.querySelectorAll('#m-view .m-suggest-chip').length);
+    ok('默认热搜 chip 里有词',
+       (doc.querySelector('#m-view .m-suggest-chip') || {}).textContent &&
+       doc.querySelector('#m-view .m-suggest-chip').textContent.indexOf('自由的你') >= 0,
+       (doc.querySelector('#m-view .m-suggest-chip') || {}).textContent);
+
     var snap = M.snapshot();
     var inputRef = findRef(snap.tree, 'textbox', '搜索关键词');
     ok('快照里找得到输入框', !!inputRef);

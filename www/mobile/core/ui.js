@@ -30,7 +30,16 @@
         else n.setAttribute(k, attrs[k]);
       });
     }
-    if (html != null) n.innerHTML = html;
+    if (html != null) {
+      // 第三个参数既可以是字符串，也可以是**元素/片段**。
+      // 传元素时必须 appendChild —— 走 innerHTML 会渲染成
+      // 「[object HTMLButtonElement]」（真机上就是这么被发现的）。
+      if (html.nodeType === 1 || html.nodeType === 11) {
+        n.appendChild(html);
+      } else {
+        n.innerHTML = html;
+      }
+    }
     return n;
   }
 
@@ -104,6 +113,33 @@
       item.appendChild(el('div', { class: 'm-skeleton m-skeleton-tile', 'aria-hidden': 'true' }));
       item.appendChild(el('div', { class: 'm-skeleton skeleton-line', 'aria-hidden': 'true' }));
       wrap.appendChild(item);
+    }
+    return wrap;
+  }
+
+  /**
+   * 详情页的占位：形状要跟真实内容像 —— 一个头图 + 若干行。
+   *
+   * 之前用的是通用的方块网格（2×2）。详情页根本没有网格布局，
+   * 那一屏大白方块看着就像界面坏了（真机实拍）。
+   */
+  function skeletonDetail() {
+    var wrap = el('div', {
+      class: 'm-skeleton-detail', role: 'list', 'aria-label': '加载中', 'aria-busy': 'true'
+    });
+
+    var head = el('div', { class: 'm-skeleton-head', role: 'listitem' });
+    head.appendChild(el('div', { class: 'm-skeleton m-skeleton-cover', 'aria-hidden': 'true' }));
+    var lines = el('div', { class: 'm-skeleton-lines' });
+    lines.appendChild(el('div', { class: 'm-skeleton skeleton-line', 'aria-hidden': 'true' }));
+    lines.appendChild(el('div', { class: 'm-skeleton skeleton-line skeleton-line-short', 'aria-hidden': 'true' }));
+    head.appendChild(lines);
+    wrap.appendChild(head);
+
+    for (var i = 0; i < 4; i++) {
+      var row = el('div', { class: 'm-skeleton-row', role: 'listitem' });
+      row.appendChild(el('div', { class: 'm-skeleton skeleton-line', 'aria-hidden': 'true' }));
+      wrap.appendChild(row);
     }
     return wrap;
   }
@@ -451,6 +487,7 @@
     section: section,
     skeleton: skeleton,
     skeletonRail: skeletonRail,
+    skeletonDetail: skeletonDetail,
     emptyNote: emptyNote,
     errorCard: errorCard,
     loginCard: loginCard,

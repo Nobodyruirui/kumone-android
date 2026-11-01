@@ -22,12 +22,22 @@
     module.exports = factory(require('./errors.js'));
   } else {
     root.Mobile = root.Mobile || {};
+    // 安卓上由原生层持有真正的 MediaSession（锁屏 / 通知栏 / 耳机按键），
+    // 浏览器里才用 navigator.mediaSession —— 两边同时用会出现两条媒体通知。
+    var isNative = !!(root.Capacitor && root.Capacitor.isNativePlatform && root.Capacitor.isNativePlatform());
+    var nativeMedia = null;
+    if (isNative) {
+      try {
+        nativeMedia = (root.Capacitor.Plugins && root.Capacitor.Plugins.KumoneMedia) || null;
+      } catch (_) { nativeMedia = null; }
+    }
     var api = factory(root.Mobile.errors);
     root.Mobile.player = api.createPlayer({
       service: root.Mobile.service,
       audio: new Audio(),
       store: api.makeStore(),
-      mediaSession: typeof navigator !== 'undefined' ? navigator.mediaSession : null,
+      mediaSession: isNative ? null : (typeof navigator !== 'undefined' ? navigator.mediaSession : null),
+      nativeMedia: nativeMedia,
       onChange: function (snap) {
         var shell = root.Mobile.shell;
         if (!shell) return;
@@ -79,6 +89,7 @@
    * @param {object} opts.audio 音频元素（浏览器 new Audio() / Node 假对象）
    * @param {object} [opts.store] 持久化
    * @param {object} [opts.mediaSession] navigator.mediaSession
+   * @param {object} [opts.nativeMedia] 原生媒体桥（安卓）：后台播放服务 + 系统媒体会话
    * @param {function} [opts.onChange] 状态变化回调
    */
   function createPlayer(opts) {
@@ -87,6 +98,7 @@
     var audio = opts.audio;
     var store = opts.store || makeStore();
     var mediaSession = opts.mediaSession || null;
+    var nativeMedia = opts.nativeMedia || null;
     var onChange = opts.onChange || function () {};
     var subscribers = [onChange];
 
@@ -133,6 +145,63 @@
       subscribers.slice().forEach(function (fn) {
         try { fn(snap); } catch (_) { /* 订阅者自己的错不该影响引擎 */ }
       });
+      syncMediaSession();
+      publishNativeMedia(snap);
+    }
+
+    /* ------------------------------------------- 系统媒体会话 / 原生桥 */
+
+    // 发布给原生层的状态：换了歌 / 播放状态变了立刻发，进度每 4 秒补一次
+    var nativeKey = null;
+    var nativeAt = 0;
+
+    /**
+     * 把「现在在放什么」告诉原生层。
+     * 原生层据此让后台播放服务活着，并把状态发到系统媒体会话
+     * （锁屏 / 通知栏 / 耳机按键）。安卓上这是后台能继续播的前提。
+     */
+    function publishNativeMedia(snap) {
+      if (!nativeMedia || typeof nativeMedia.publish !== 'function') return;
+      var key = (snap.track ? snap.track.id : 0) + '|' + (snap.playing ? '1' : '0');
+      var now = Date.now();
+      if (key === nativeKey && now - nativeAt < 4000) return;
+      nativeKey = key;
+      nativeAt = now;
+      try {
+        nativeMedia.publish({
+          title: snap.trackName || '',
+          artist: snap.artist || '',
+          album: snap.album || '',
+          cover: snap.cover || '',
+          playing: !!snap.playing,
+          position: snap.position,
+          duration: snap.duration
+        });
+      } catch (_) { /* 没有原生桥（浏览器预览）就跳过 */ }
+    }
+
+    /**
+     * 浏览器里的媒体会话：把播放状态也报上去。
+     * 只有 playbackState 是 playing，系统才认这是一个「正在播媒体」的 App
+     * —— 没有它，后台播放与锁屏控制都不成立。
+     */
+    function syncMediaSession() {
+      if (!mediaSession) return;
+      try {
+        if (typeof mediaSession.setPositionState === 'function' && audio) {
+          var dur = (audio.duration && isFinite(audio.duration)) ? audio.duration : 0;
+          if (dur > 0) {
+            mediaSession.setPositionState({
+              duration: dur,
+              position: Math.min(audio.currentTime || 0, dur),
+              playbackRate: audio.paused ? 0 : 1
+            });
+          }
+        }
+        if ('playbackState' in mediaSession) {
+          mediaSession.playbackState = (audio && !audio.paused) ? 'playing' : 'paused';
+        }
+      } catch (_) { /* 不支持就算了 */ }
     }
 
     /* ---------------------------------------------------------- 读状态 */
@@ -590,8 +659,27 @@
 
     /* --------------------------------------------------- 音频事件接线 */
 
+    /**
+     * 一曲放完 → 下一首。
+     *
+     * 后台续播失败多半是网络被限流（Doze / 厂商省电），
+     * 所以失败时**重试几次**：别让「一首歌放完」变成「音乐停了」。
+     */
+    var endRetry = 0;
+    function advanceAfterEnd() {
+      return next(false).then(function (snap) {
+        if (snap && snap.error && snap.error.kind === 'transient' && endRetry < 3) {
+          endRetry++;
+          setTimeout(advanceAfterEnd, 2500);
+          return snap;
+        }
+        endRetry = 0;
+        return snap;
+      });
+    }
+
     if (audio && typeof audio.addEventListener === 'function') {
-      audio.addEventListener('ended', function () { next(false); });
+      audio.addEventListener('ended', function () { advanceAfterEnd(); });
       audio.addEventListener('timeupdate', function () { emit(); });
       audio.addEventListener('play', function () { emit(); });
       audio.addEventListener('pause', function () { emit(); });

@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<title>Kumone 搜索页实拍</title>
+<style>
+  html, body { margin: 0; padding: 0; background: #d8d8dd; }
+  #app { width: 390px; height: 844px; border: 0; display: block; }
+</style>
+</head>
+<body>
+<iframe id="app" src="/www/index.html"></iframe>
+<script>
+var frame = document.getElementById('app');
+function fakeService() {
+  return {
+    isLoggedIn: function () { return Promise.resolve(true); },
+    account: function () { return Promise.resolve({ ok: true, data: { userId: 77, nickname: '测试用户', avatarUrl: '', vipType: 1 } }); },
+    searchDefaultKeyword: function () { return Promise.resolve({ ok: true, data: '🔥 自由的你' }); },
+    searchSuggest: function () { return Promise.resolve({ ok: true, data: { songs: [], albums: [], artists: [], playlists: [] } }); },
+    search: function () { return Promise.resolve({ ok: true, data: { songs: [], albums: [], artists: [], playlists: [], counts: {} } }); },
+    dailyRecommend: function () { return Promise.resolve({ ok: true, data: [] }); },
+    recommendedPlaylists: function () { return Promise.resolve({ ok: true, data: [] }); },
+    toplists: function () { return Promise.resolve({ ok: true, data: [] }); },
+    topArtists: function () { return Promise.resolve({ ok: true, data: [] }); },
+    newAlbums: function () { return Promise.resolve({ ok: true, data: [] }); }
+  };
+}
+frame.addEventListener('load', function () {
+  setTimeout(function () {
+    var M = frame.contentWindow.Mobile;
+    M.service = fakeService();
+    M.actions.refreshAccount();
+    M.state.view = { type: 'search' };
+    M.state.history = [];
+    M.render();
+  }, 600);
+});
+</script>
+</body>
+</html>

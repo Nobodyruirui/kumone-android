@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<title>Kumone 导航方案对比</title>
+<link rel="stylesheet" href="/www/mobile/css/tokens.css">
+<link rel="stylesheet" href="/www/mobile/css/shell.css">
+<style>
+  body {
+    margin: 0;
+    padding: 26px 24px 30px;
+    background: #ededf1;
+    font-family: var(--font);
+    display: flex;
+    gap: 26px;
+    align-items: flex-start;
+  }
+  .col { width: 390px; }
+  .cap { margin: 0 0 10px; font-size: 15px; font-weight: 700; color: #0a0a0a; }
+  .cap span { display: block; font-size: 12px; font-weight: 400; color: rgba(10,10,10,.5); margin-top: 3px; }
+  .phone {
+    width: 390px; height: 844px; overflow: hidden; position: relative;
+    background: var(--canvas); border-radius: 26px; border: 1px solid #d8d8dd;
+    display: flex; flex-direction: column;
+  }
+  /* 状态栏（模拟真机） */
+  .statusbar {
+    height: 34px; flex: 0 0 34px; background: var(--canvas);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 18px; font-size: 11px; font-weight: 600; color: #0a0a0a;
+  }
+  .statusbar .r { display: flex; gap: 6px; align-items: center; font-size: 10px; opacity: .8; }
+  .app { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  .main { flex: 1; min-height: 0; overflow: hidden; padding-bottom: 150px; }
+  .mini {
+    position: absolute; left: 16px; right: 16px; bottom: 84px; height: 60px;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 18px;
+    display: flex; align-items: center; gap: 12px; padding: 0 8px 0 10px;
+    box-shadow: var(--shadow-card);
+  }
+  .mini .cv { width: 44px; height: 44px; border-radius: 12px; background: linear-gradient(140deg,#dcdcdc,#f5dea9); }
+  .mini .t { font-size: 14px; font-weight: 700; }
+  .mini .s { font-size: 12px; color: var(--ink-2); }
+  .mini .btn { margin-left: auto; width: 34px; height: 34px; border: 1px solid var(--line);
+    border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; }
+  .nav {
+    position: absolute; left: 0; right: 0; bottom: 0; height: 84px;
+    background: var(--surface); border-top: 1px solid var(--line);
+    display: flex; align-items: flex-start; padding-top: 8px;
+  }
+  .tab { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
+    font-size: 10px; color: var(--ink-2); }
+  .tab.on { color: var(--ink); font-weight: 700; }
+  .tab svg { width: 22px; height: 22px; }
+  /* 方案 A：一次性左上角胶囊 */
+  .chip {
+    display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 11px;
+    border: 1px solid var(--line-strong); border-radius: var(--radius-pill);
+    font-size: 12px; font-weight: 700; color: var(--ink); background: var(--surface);
+    white-space: nowrap;
+  }
+  .chip svg { width: 14px; height: 14px; }
+  .chip .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--role-owned); }
+  /* 方案 B：常驻圆形图标 */
+  .iconbtn {
+    width: 32px; height: 32px; border: 1px solid var(--line); border-radius: 50%;
+    display: flex; align-items: center; justify-content: center; background: var(--surface);
+  }
+  .iconbtn svg { width: 16px; height: 16px; }
+  /* 方案 C：主页快捷行 */
+  .quickrow { display: flex; gap: 10px; margin: 14px 16px 0; }
+  .quick { flex: 1; border: 1px solid var(--line); border-radius: var(--radius-card);
+    background: var(--surface); padding: 12px; }
+  .quick .n { font-size: 13px; font-weight: 700; }
+  .quick .d { font-size: 11px; color: var(--ink-2); margin-top: 3px; }
+  .quick .r { width: 22px; height: 22px; border-radius: 8px; margin-bottom: 8px; }
+  .hdr { display: flex; align-items: center; gap: 8px; height: 46px; padding: 0 12px;
+    background: var(--surface); border-bottom: 1px solid var(--line); }
+  .hdr .title { flex: 1; text-align: center; font-size: 14px; font-weight: 600; }
+  .acct { display: flex; align-items: center; gap: 6px; border: 1px solid var(--line);
+    border-radius: var(--radius-pill); padding: 3px 9px 3px 3px; background: var(--surface); }
+  .acct .av { width: 24px; height: 24px; border-radius: 50%; background: linear-gradient(140deg,#f3c3c0,#f2c489); }
+  .acct .n { font-size: 12px; font-weight: 600; }
+  .acct .v { font-size: 9px; font-weight: 800; background: var(--role-owned); border-radius: 6px; padding: 1px 4px; }
+  .display { font-size: 30px; font-weight: 800; letter-spacing: -.6px; margin: 18px 16px 4px; }
+  .note { font-size: 13px; color: var(--ink-2); margin: 0 16px 14px; font-style: italic; }
+  .rail { display: flex; gap: 12px; padding: 0 16px; }
+  .tile { width: 132px; }
+  .tile .c { width: 132px; height: 132px; border-radius: var(--radius-card);
+    border: 1px solid var(--line); background: var(--surface); }
+  .tile .n { font-size: 13px; font-weight: 600; margin-top: 7px; }
+  .tile .s { font-size: 11px; color: var(--ink-2); margin-top: 2px; }
+  .sheet { position: absolute; left: 16px; right: 16px; bottom: 0; background: var(--surface);
+    border-radius: 20px 20px 0 0; border: 1px solid var(--line); padding: 12px 14px 16px; }
+  .sheet .t { font-size: 12px; color: var(--ink-2); margin-bottom: 8px; }
+  .sheet .row { display: flex; align-items: center; gap: 10px; padding: 9px 0;
+    border-bottom: 1px solid var(--line); font-size: 14px; font-weight: 600; }
+  .sheet .row:last-child { border-bottom: none; }
+  .sheet .row .r { width: 20px; height: 20px; border-radius: 7px; }
+</style>
+</head>
+<body>
+<script>
+  // ?only=A|B|C —— 只显示一个方案，方便单独出图
+  (function () {
+    var only = (location.search.match(/only=([ABC])/) || [])[1];
+    if (!only) return;
+    function apply() {
+      var cols = document.querySelectorAll('.col');
+      for (var i = 0; i < cols.length; i++) {
+        var letter = 'ABC'[i];
+        if (letter !== only) cols[i].style.display = 'none';
+      }
+      document.body.style.width = '430px';
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', apply);
+    } else {
+      apply();
+    }
+  })();
+</script>
+
+<!-- ============================ 方案 A ============================ -->
+<div class="col">
+  <p class="cap">方案 A · 一次性左上角入口<span>底部三键；左上角「我的歌单·收藏」用一次即消失；右上角账号胶囊点开「我的」</span></p>
+  <div class="phone">
+    <div class="statusbar"><span>6:59</span><span class="r">✱ 5G ▮▮▮ 43</span></div>
+    <div class="app">
+      <div class="main">
+        <div class="hdr">
+          <span class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 5.6h16"/><path d="M4 10.6h16"/><path d="M4 15.6h9.5"/></svg>我的歌单</span>
+          <span class="title"></span>
+          <span class="acct"><span class="av"></span><span class="n">测试用户</span><span class="v">VIP</span></span>
+        </div>
+        <div class="display">听点什么</div>
+        <div class="note">daily mix</div>
+        <div class="rail">
+          <div class="tile"><div class="c" style="background:linear-gradient(140deg,#f2c489,#f5dea9)"></div><div class="n">每日推荐</div><div class="s">30 首</div></div>
+          <div class="tile"><div class="c" style="background:linear-gradient(140deg,#a9cbe8,#dcdcdc)"></div><div class="n">私人 FM</div><div class="s">一直放</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="mini"><span class="cv"></span><div><div class="t">黑白</div><div class="s">方大同</div></div><div class="btn">❚❚</div></div>
+    <div class="nav">
+      <div class="tab on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 10.4 12 3.8l8.5 6.6"/><path d="M5.6 9.6V20h12.8V9.6"/></svg>主页</div>
+      <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="2.4" fill="currentColor" stroke="none"/><path d="M8.2 8.2a5.4 5.4 0 0 0 0 7.6"/><path d="M15.8 15.8a5.4 5.4 0 0 0 0-7.6"/><path d="M5.4 5.4a9.4 9.4 0 0 0 0 13.2"/><path d="M18.6 18.6a9.4 9.4 0 0 0 0-13.2"/></svg>广播</div>
+      <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="10.8" cy="10.8" r="6.4"/><path d="M15.6 15.6 20.4 20.4"/></svg>搜索</div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================ 方案 B ============================ -->
+<div class="col">
+  <p class="cap">方案 B · 左上角常驻图标<span>底部三键；左上角永远是「我的」图标（不消失）；账号胶囊只管退出登录</span></p>
+  <div class="phone">
+    <div class="statusbar"><span>6:59</span><span class="r">✱ 5G ▮▮▮ 43</span></div>
+    <div class="app">
+      <div class="main">
+        <div class="hdr">
+          <span class="iconbtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 5.6h16"/><path d="M4 10.6h16"/><path d="M4 15.6h9.5"/></svg></span>
+          <span class="title"></span>
+          <span class="acct"><span class="av"></span><span class="n">测试用户</span><span class="v">VIP</span></span>
+        </div>
+        <div class="display">听点什么</div>
+        <div class="note">daily mix</div>
+        <div class="rail">
+          <div class="tile"><div class="c" style="background:linear-gradient(140deg,#f2c489,#f5dea9)"></div><div class="n">每日推荐</div><div class="s">30 首</div></div>
+          <div class="tile"><div class="c" style="background:linear-gradient(140deg,#a9cbe8,#dcdcdc)"></div><div class="n">私人 FM</div><div class="s">一直放</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="mini"><span class="cv"></span><div><div class="t">黑白</div><div class="s">方大同</div></div><div class="btn">❚❚</div></div>
+    <div class="nav">
+      <div class="tab on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 10.4 12 3.8l8.5 6.6"/><path d="M5.6 9.6V20h12.8V9.6"/></svg>主页</div>
+      <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="2.4" fill="currentColor" stroke="none"/><path d="M8.2 8.2a5.4 5.4 0 0 0 0 7.6"/><path d="M15.8 15.8a5.4 5.4 0 0 0 0-7.6"/><path d="M5.4 5.4a9.4 9.4 0 0 0 0 13.2"/><path d="M18.6 18.6a9.4 9.4 0 0 0 0-13.2"/></svg>广播</div>
+      <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="10.8" cy="10.8" r="6.4"/><path d="M15.6 15.6 20.4 20.4"/></svg>搜索</div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================ 方案 C ============================ -->
+<div class="col">
+  <p class="cap">方案 C · 主页快捷卡 + 账号抽屉<span>底部三键；左上角不动；主页顶部两张「我的歌单 / 收藏的专辑」快捷卡；账号胶囊点开抽屉</span></p>
+  <div class="phone">
+    <div class="statusbar"><span>6:59</span><span class="r">✱ 5G ▮▮▮ 43</span></div>
+    <div class="app">
+      <div class="main">
+        <div class="hdr">
+          <span style="width:32px"></span>
+          <span class="title"></span>
+          <span class="acct"><span class="av"></span><span class="n">测试用户</span><span class="v">VIP</span></span>
+        </div>
+        <div class="display">听点什么</div>
+        <div class="note">daily mix</div>
+        <div class="quickrow">
+          <div class="quick"><div class="r" style="background:var(--role-owned)"></div><div class="n">我的歌单</div><div class="d">3 个歌单</div></div>
+          <div class="quick"><div class="r" style="background:var(--role-curated)"></div><div class="n">收藏的专辑</div><div class="d">5 张专辑</div></div>
+        </div>
+        <div class="rail" style="margin-top:18px">
+          <div class="tile"><div class="c" style="background:linear-gradient(140deg,#f2c489,#f5dea9)"></div><div class="n">每日推荐</div><div class="s">30 首</div></div>
+          <div class="tile"><div class="c" style="background:linear-gradient(140deg,#a9cbe8,#dcdcdc)"></div><div class="n">私人 FM</div><div class="s">一直放</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="mini"><span class="cv"></span><div><div class="t">黑白</div><div class="s">方大同</div></div><div class="btn">❚❚</div></div>
+    <div class="nav">
+      <div class="tab on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 10.4 12 3.8l8.5 6.6"/><path d="M5.6 9.6V20h12.8V9.6"/></svg>主页</div>
+      <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="2.4" fill="currentColor" stroke="none"/><path d="M8.2 8.2a5.4 5.4 0 0 0 0 7.6"/><path d="M15.8 15.8a5.4 5.4 0 0 0 0-7.6"/><path d="M5.4 5.4a9.4 9.4 0 0 0 0 13.2"/><path d="M18.6 18.6a9.4 9.4 0 0 0 0-13.2"/></svg>广播</div>
+      <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="10.8" cy="10.8" r="6.4"/><path d="M15.6 15.6 20.4 20.4"/></svg>搜索</div>
+    </div>
+    <div class="sheet">
+      <div class="t">测试用户 · VIP</div>
+      <div class="row"><span class="r" style="background:var(--role-owned)"></span>我的歌单</div>
+      <div class="row"><span class="r" style="background:var(--role-curated)"></span>收藏的专辑</div>
+      <div class="row"><span class="r" style="background:var(--role-auto)"></span>最近播放</div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

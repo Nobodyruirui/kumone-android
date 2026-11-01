@@ -15,10 +15,12 @@
 
   var ui = M.ui;
 
+  // 入口顺序 = 用户最可能找的东西排在前面：
+  // 「我的歌单」和「收藏的专辑」是用户报过「找不到」的两个，先摆出来。
   var ENTRIES = [
-    { key: 'playlists', label: '播放列表', role: 'owned', view: 'myplaylists' },
-    { key: 'liked', label: '喜欢的音乐', role: 'owned', view: 'liked' },
+    { key: 'playlists', label: '我的歌单', role: 'owned', view: 'myplaylists' },
     { key: 'favalbums', label: '收藏的专辑', role: 'owned', view: 'favalbums' },
+    { key: 'liked', label: '喜欢的音乐', role: 'owned', view: 'liked' },
     { key: 'cloud', label: '云盘', role: 'neutral', view: 'cloud' },
     { key: 'recent', label: '最近播放', role: 'auto', view: 'recent' },
     { key: 'records', label: '听歌排行', role: 'curated', view: 'records' }
@@ -73,8 +75,93 @@
 
   /* ------------------------------------------------------------ 视图 */
 
+  /**
+   * 「我的」的入口列表 —— 页面与底部抽屉**共用**这一份。
+   *
+   * 为什么共用：同一个入口集合写两遍，迟早会出现「抽屉里有、页面里没有」
+   * 这种两个真相。这份函数只管造 DOM，摘要自己异步补。
+   *
+   * @param {object} [opts] { onPick: 点某一行之前先调（抽屉用来先收起自己）, logout: 末尾加「退出登录」 }
+   * @returns {object} { list, rows }
+   */
+  function buildEntries(opts) {
+    opts = opts || {};
+    var list = ui.el('ul', { class: 'm-list', role: 'list', 'aria-label': '我的内容' });
+    var rows = [];
+
+    ENTRIES.forEach(function (e) {
+      // <li> 承担列表语义，<button> 承担可点语义 —— 两者都要有，
+      // 否则快照里这个元素拿不到 ref，模型点不了。
+      var li = ui.el('li', { class: 'm-list-item', role: 'listitem' });
+      var row = ui.el('button', {
+        class: 'm-list-row',
+        type: 'button',
+        'aria-label': e.label
+      });
+      var dot = ui.el('span', { class: 'm-list-dot', 'aria-hidden': 'true' });
+      dot.setAttribute('data-role', e.role);
+      row.appendChild(dot);
+
+      var main = ui.el('div', { class: 'm-track-main' });
+      main.appendChild(ui.el('div', { class: 'm-track-name' }, e.label));
+      var sub = ui.el('div', { class: 'm-track-sub' }, '加载中…');
+      main.appendChild(sub);
+      row.appendChild(main);
+
+      row.appendChild(ui.el('span', { class: 'm-track-dur', 'aria-hidden': 'true' }, '›'));
+
+      row.addEventListener('click', function () {
+        if (typeof opts.onPick === 'function') opts.onPick();
+        M.nav({ type: e.view, label: e.label });
+      });
+      li.appendChild(row);
+      list.appendChild(li);
+      rows.push({ entry: e, sub: sub });
+    });
+
+    // 退出登录：放在最后，与其它入口用不同的角色色区分
+    if (opts.logout) {
+      var li2 = ui.el('li', { class: 'm-list-item', role: 'listitem' });
+      var row2 = ui.el('button', {
+        class: 'm-list-row m-list-row-quiet',
+        type: 'button',
+        'aria-label': '退出登录'
+      });
+      var dot2 = ui.el('span', { class: 'm-list-dot', 'aria-hidden': 'true' });
+      dot2.setAttribute('data-role', 'neutral');
+      row2.appendChild(dot2);
+      var main2 = ui.el('div', { class: 'm-track-main' });
+      main2.appendChild(ui.el('div', { class: 'm-track-name' }, '退出登录'));
+      main2.appendChild(ui.el('div', { class: 'm-track-sub' }, '清除本机的登录状态'));
+      row2.appendChild(main2);
+      row2.appendChild(ui.el('span', { class: 'm-track-dur', 'aria-hidden': 'true' }, '›'));
+      row2.addEventListener('click', function () {
+        if (typeof opts.onPick === 'function') opts.onPick();
+        if (M.actions && M.actions.confirmLogout) M.actions.confirmLogout();
+      });
+      li2.appendChild(row2);
+      list.appendChild(li2);
+    }
+
+    // 计数异步补上；取不到就写「加载失败」，不假装有数据
+    Promise.resolve(M.service.account()).then(function (acc) {
+      var uid = (acc && acc.ok && acc.data) ? acc.data.userId : 0;
+      rows.forEach(function (r) {
+        summaryOf(r.entry, uid).then(function (s) {
+          if (!r.sub.isConnected) return;
+          r.sub.textContent = s.text;
+          if (s.err) r.sub.setAttribute('data-code', s.err.code || '');
+        });
+      });
+    });
+
+    return { list: list, rows: rows };
+  }
+
   M.views.library = {
-    title: '资料库',
+    title: '我的',
+    // 离开后停放：返回时不用重新拉一遍摘要（没有订阅与轮询，放着安全）。
+    cacheable: true,
 
     /**
      * 进入前的闸：未登录就直接拉起扫码登录。
@@ -90,56 +177,14 @@
 
     render: function () {
       var frag = document.createDocumentFragment();
-      frag.appendChild(ui.el('h1', { class: 'm-display' }, '资料库'));
+      frag.appendChild(ui.el('h1', { class: 'm-display' }, '我的'));
       frag.appendChild(ui.el('p', { class: 'm-section-note' }, 'yours'));
-
-      var list = ui.el('ul', { class: 'm-list', role: 'list', 'aria-label': '资料库入口' });
-      var rows = [];
-
-      ENTRIES.forEach(function (e) {
-        // <li> 承担列表语义，<button> 承担可点语义 —— 两者都要有，
-        // 否则快照里这个元素拿不到 ref，模型点不了。
-        var li = ui.el('li', { class: 'm-list-item', role: 'listitem' });
-        var row = ui.el('button', {
-          class: 'm-list-row',
-          type: 'button',
-          'aria-label': e.label
-        });
-        var dot = ui.el('span', { class: 'm-list-dot', 'aria-hidden': 'true' });
-        dot.setAttribute('data-role', e.role);
-        row.appendChild(dot);
-
-        var main = ui.el('div', { class: 'm-track-main' });
-        main.appendChild(ui.el('div', { class: 'm-track-name' }, e.label));
-        var sub = ui.el('div', { class: 'm-track-sub' }, '加载中…');
-        main.appendChild(sub);
-        row.appendChild(main);
-
-        row.appendChild(ui.el('span', { class: 'm-track-dur', 'aria-hidden': 'true' }, '›'));
-
-        row.addEventListener('click', function () {
-          M.nav({ type: e.view, label: e.label });
-        });
-        li.appendChild(row);
-        list.appendChild(li);
-        rows.push({ entry: e, sub: sub });
-      });
-
-      frag.appendChild(list);
-
-      // 计数异步补上；取不到就写「加载失败」，不假装有数据
-      Promise.resolve(M.service.account()).then(function (acc) {
-        var uid = (acc && acc.ok && acc.data) ? acc.data.userId : 0;
-        rows.forEach(function (r) {
-          summaryOf(r.entry, uid).then(function (s) {
-            if (!r.sub.isConnected) return;
-            r.sub.textContent = s.text;
-            if (s.err) r.sub.setAttribute('data-code', s.err.code || '');
-          });
-        });
-      });
-
+      frag.appendChild(buildEntries({ logout: true }).list);
       return frag;
     }
   };
+
+  // 抽屉（顶栏入口）也用这份入口集合 —— 同一件事不能有两个真相
+  M.mine = { ENTRIES: ENTRIES, buildEntries: buildEntries, summaryOf: summaryOf };
 })(window.Mobile = window.Mobile || {});
+

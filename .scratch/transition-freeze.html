@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<title>Kumone 转场定格</title>
+<style>
+  html, body { margin: 0; padding: 0; background: #d8d8dd; display: flex; gap: 10px; }
+  #app { width: 390px; height: 844px; border: 0; display: block; }
+  .col { display: flex; flex-direction: column; align-items: center; }
+  .cap { font: 12px/1.4 system-ui, color: #333; padding: 4px 0 6px; }
+</style>
+</head>
+<body>
+<div class="col">
+  <div class="cap" id="cap">…</div>
+  <iframe id="app" src="/www/index.html"></iframe>
+</div>
+<script>
+var CAP = document.getElementById('cap');
+function say(s) { CAP.textContent = s; }
+
+var frame = document.getElementById('app');
+
+function fakeService() {
+  var TRACK = { id: 1, name: '黑白', artists: [{ id: 9, name: '方大同' }],
+    album: { id: 3, name: '黑白', picUrl: '' }, durationMS: 210000 };
+  var PL = { id: 22, name: '歌单一', cover: '', creator: { nickname: '我' }, playCount: 1, trackCount: 1 };
+  return {
+    isLoggedIn: function () { return Promise.resolve(true); },
+    account: function () { return Promise.resolve({ ok: true, data: { userId: 77, nickname: '测试用户', avatarUrl: '', vipType: 1 } }); },
+    dailyRecommend: function () { return Promise.resolve({ ok: true, data: [TRACK, TRACK, TRACK] }); },
+    recommendedPlaylists: function () { return Promise.resolve({ ok: true, data: [PL] }); },
+    toplists: function () { return Promise.resolve({ ok: true, data: [PL] }); },
+    topArtists: function () { return Promise.resolve({ ok: true, data: [{ id: 9, name: '方大同', pic: '' }] }); },
+    newAlbums: function () { return Promise.resolve({ ok: true, data: [{ id: 8, name: '乱', pic: '', artistName: '周杰伦' }] }); },
+    playlistDetail: function (id) {
+      return new Promise(function (res) {
+        setTimeout(function () {
+          res({ ok: true, data: { playlist: { id: id, name: '歌单' + id, cover: '', trackCount: 2, creator: { nickname: 'x' } },
+            tracks: [TRACK, TRACK], trackIds: [], total: 2 } });
+        }, 200);
+      });
+    },
+    songUrl: function () { return Promise.resolve({ ok: true, data: { url: 'https://example.test/a.mp3', level: 'standard' } }); }
+  };
+}
+
+frame.addEventListener('load', function () {
+  var W = frame.contentWindow;
+  var M = W.Mobile;
+  var reduced = false;
+  try { reduced = W.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
+  window.__reduced = reduced;
+
+  M.service = fakeService();
+  M.actions.refreshAccount();
+  M.state.view = { type: 'home' };
+  M.state.history = [];
+  M.render();
+  say('reduced=' + reduced);
+
+  // **把转场放慢 10 倍**：截图时它还在半路上，才看得清过渡长什么样。
+  // （inline 的 transition 会被带 !important 的样式表盖掉 ✓）
+  var st = W.document.createElement('style');
+  st.textContent = '#m-view, #m-view-prev { transition-duration: 3s !important; }';
+  W.document.head.appendChild(st);
+
+  // 给 CDP 脚本用：手动触发一次转场
+  window.__fire = function () {
+    M.nav({ type: 'playlist', id: 22, name: '歌单一' });
+    return true;
+  };
+});
+</script>
+</body>
+</html>

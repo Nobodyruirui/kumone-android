@@ -180,11 +180,18 @@ var COMMANDS = {
     show('model', 'snapshot() → ok=' + snap.ok + '（树节选）', snap.tree.split('\n').slice(0, 22).join('\n'));
   },
   act: function () {
-    var ref = refOf('button', '资料库');
-    if (!ref) return show('model', '找不到「资料库」按钮', '');
+    // 「我的」的入口现在是顶栏左上角的一次性胶囊；用过了就只剩底部的「广播」。
+    // 两个都试一遍 —— 演示不能因为「那个胶囊已经用过了」就失灵。
+    var candidates = ['我的歌单与收藏', '广播'];
+    var ref = null, name = '';
+    for (var i = 0; i < candidates.length; i++) {
+      ref = refOf('button', candidates[i]);
+      if (ref) { name = candidates[i]; break; }
+    }
+    if (!ref) return show('model', '找不到可点的按钮', '');
     var receipt = M().act(ref, 'click');
     show('model', 'act(' + ref + ', "click") → ' + JSON.stringify(receipt),
-      '界面已切到资料库。再点一次「读语义树」看看树变了。');
+      '点的是「' + name + '」。再点一次「读语义树」看看树变了。');
   },
   stale: function () {
     var r = M().act('@999999', 'click');

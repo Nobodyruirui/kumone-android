@@ -288,5 +288,64 @@ check('分层：引擎源码不含 document.', !/document\./.test(src));
 check('分层：引擎源码不含 getElementById', !/getElementById/.test(src));
 check('分层：引擎源码不含 querySelector', !/querySelector/.test(src));
 
+/* ------------------------------------------ 14. 后台播放：媒体会话与原生桥 */
+
+const nativeCalls = [];
+const fakeNative = {
+  publish(payload) { nativeCalls.push(payload); return Promise.resolve(); }
+};
+const mediaStates = [];
+const fakeMediaSession = {
+  metadata: null,
+  playbackState: 'none',
+  setActionHandler() {},
+  setPositionState(pos) { mediaStates.push(pos); }
+};
+
+service = {
+  songUrl: (id, level) => Promise.resolve({ ok: true, data: { url: 'https://x/' + id + '.mp3', level } })
+};
+audio = fakeAudio();
+player = createPlayer({
+  service, audio, store: fakeStore(),
+  mediaSession: fakeMediaSession, nativeMedia: fakeNative
+});
+await player.playQueue([track(1), track(2)], 0);
+check('原生桥：开始播放就发布了状态', nativeCalls.length >= 1, 'calls=' + nativeCalls.length);
+check('原生桥：发布的是当前曲目', nativeCalls.length && nativeCalls[nativeCalls.length - 1].title === '曲目1',
+  JSON.stringify(nativeCalls[nativeCalls.length - 1] || {}));
+check('原生桥：发布里带封面', nativeCalls.length && nativeCalls[nativeCalls.length - 1].cover === 'http://p/c.jpg');
+check('原生桥：发布里 playing 为真', nativeCalls.length && nativeCalls[nativeCalls.length - 1].playing === true);
+check('媒体会话：设置了 playbackState=playing', fakeMediaSession.playbackState === 'playing',
+  fakeMediaSession.playbackState);
+
+// 一曲放完 → 自动下一首（后台续播走的就是这条路）
+audio.fire('ended');
+await new Promise((r) => setTimeout(r, 80));
+check('放完自动切下一首', player.state().trackName === '曲目2', player.state().trackName);
+check('放完自动切下一首：原生桥也更新了',
+  nativeCalls.length && nativeCalls[nativeCalls.length - 1].title === '曲目2',
+  JSON.stringify(nativeCalls[nativeCalls.length - 1] || {}));
+
+// 暂停 → playbackState 跟着变
+await player.pause();
+check('暂停后 playbackState=paused', fakeMediaSession.playbackState === 'paused', fakeMediaSession.playbackState);
+
+// 后台续播失败（网络被限流）时要有重试，不能就此停下
+let flaky = 0;
+service = {
+  songUrl: () => {
+    flaky++;
+    if (flaky <= 1) return Promise.resolve({ ok: false, code: 'KUMONE_NETWORK', kind: 'transient' });
+    return Promise.resolve({ ok: true, data: { url: 'https://x/flaky.mp3', level: 'standard' } });
+  }
+};
+audio = fakeAudio();
+player = createPlayer({ service, audio, store: fakeStore() });
+await player.playQueue([track(3), track(4)], 0);
+audio.fire('ended');
+await new Promise((r) => setTimeout(r, 120));
+check('续播失败会重试（不是直接停）', flaky >= 2, 'flaky=' + flaky);
+
 console.log(failed ? `\nPLAYER: ${failed} 项失败` : '\nPLAYER: ALL PASS ✔');
 process.exit(failed ? 1 : 0);

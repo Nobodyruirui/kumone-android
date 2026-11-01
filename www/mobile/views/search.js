@@ -25,6 +25,8 @@
 
   M.views.search = {
     title: '搜索',
+    // 离开后停放：返回时保留输入的关键词与结果，不用重新拉一遍。
+    cacheable: true,
 
     render: function (view) {
       var frag = document.createDocumentFragment();
@@ -269,7 +271,11 @@
           doSearch(r.data);
         });
         suggestBox.hidden = false;
-        suggestBox.appendChild(ui.el('div', { class: 'm-suggest-row' }, chip));
+        // 注意：chip 是**元素**，不能当 html 塞进 ui.el 的第三个参数 ——
+        // 那样会走 innerHTML，渲染成 "[object HTMLButtonElement]"（真机实拍）。
+        var row = ui.el('div', { class: 'm-suggest-row' });
+        row.appendChild(chip);
+        suggestBox.appendChild(row);
       });
 
       if (keyword) doSearch(keyword);

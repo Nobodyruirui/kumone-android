@@ -177,15 +177,20 @@
   /**
    * 跑一个区块：骨架 → 数据 / 空态 / 错误态 / 登录引导。
    * 每个区块自己管自己，失败不牵连别人。
+   *
+   * @param {boolean} [silent] 静默刷新：不换骨架屏，旧内容先留着，
+   *        数据到了再就地替换（缓存页面还原后的后台刷新用这个）。
    */
-  function runBlock(spec, body, loggedIn) {
+  function runBlock(spec, body, loggedIn, silent) {
     var loader = LOADERS[spec.key];
     var renderer = RENDERERS[spec.key];
     var resume = { channel: spec.key, args: {} };
 
-    body.textContent = '';
-    body.setAttribute('aria-busy', 'true');
-    body.appendChild(spec.key === 'playlists' ? ui.skeletonRail(4, spec.title) : ui.skeleton(4, spec.title));
+    if (!silent) {
+      body.textContent = '';
+      body.setAttribute('aria-busy', 'true');
+      body.appendChild(spec.key === 'playlists' ? ui.skeletonRail(4, spec.title) : ui.skeleton(4, spec.title));
+    }
 
     Promise.resolve()
       .then(loader)
@@ -248,9 +253,14 @@
 
   M.views.home = {
     title: '主页',
+    // 主页离开后**不销毁**：从播放页返回时直接还原。
+    // 否则返回的瞬间会看到「半成品主页」（骨架屏 + 还没加载出来的封面块）
+    // 叠在旧页面上 —— 真机录屏里的白方块就是这么来的。
+    cacheable: true,
     render: function () {
       var frag = document.createDocumentFragment();
-      frag.appendChild(ui.el('h1', { class: 'm-display' }, '主页'));
+      var title = ui.el('h1', { class: 'm-display' }, '主页');
+      frag.appendChild(title);
       frag.appendChild(ui.el('p', { class: 'm-section-note' }, 'discover'));
 
       var blocks = {};
@@ -270,6 +280,19 @@
           runBlock(spec, blocks[spec.key].body, false);
         });
       });
+
+      /**
+       * 缓存还原后由路由调用：**后台**重新拉一遍。
+       * 旧内容先留着（不换骨架屏），数据到了就地更新 ——
+       * 用户既不会看到方块，也不会看到一整天不更新的首页。
+       */
+      title.__refresh = function () {
+        return Promise.resolve(M.service.isLoggedIn()).then(function (loggedIn) {
+          BLOCKS.forEach(function (spec) {
+            runBlock(spec, blocks[spec.key].body, !!loggedIn, true);
+          });
+        }).catch(function () { /* 刷新失败就留着旧内容 */ });
+      };
 
       return frag;
     }

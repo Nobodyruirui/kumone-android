@@ -1,31 +1,54 @@
-'use strict';
-// 取证：网易云的「账号密码登录」接口现在还接不接得住？用假账号看返回结构。
-const api = require('../www/kumone/lib/api.js');
+// 登录接口的复现回路（phone-fixes-4）：
+//   node .scratch/probe-login.js <phone> <password>
+// 用内核打**真实**接口，把服务端返回的 code / message 打出来（密码不回显）。
+//
+// 目的：把「没法用密码登入」变成一条可复现、可断言的信号，
+// 而不是靠猜（明文 / MD5 / 端点下线 / 风控码）。
+
+const path = require('path');
+const repo = path.join(__dirname, '..');
+const api = require(path.join(repo, 'www', 'kumone', 'lib', 'api.js'));
+
+const phone = process.argv[2] || '138-0000-0000';
+const password = process.argv[3] || 'not-a-real-password';
+
+function show(label, obj) {
+  const o = obj || {};
+  console.log(label, JSON.stringify({
+    code: o.code,
+    message: o.message || o.msg || null,
+    hasCookie: typeof o.cookie === 'string' && o.cookie.length > 0,
+    keys: Object.keys(o).slice(0, 8)
+  }));
+}
 
 (async () => {
-  const probes = [
-    ['/login/cellphone (手机号+密码)', () => api.client.weapi('/login/cellphone', {
-      phone: '13800000000', password: 'Aa123456', captcha: '', verifyCode: ''
-    })],
-    ['/login/cellphone (邮箱+密码)', () => api.client.weapi('/login/cellphone', {
-      phone: 'nobody@example.com', password: 'Aa123456', captcha: '', verifyCode: ''
-    })],
-    ['/login/password', () => api.client.weapi('/login/password', {
-      user: 'nobody@example.com', password: 'Aa123456', type: 1
-    })],
-    ['/login/email', () => api.client.weapi('/login/email', {
-      email: 'nobody@example.com', password: 'Aa123456'
-    })],
-    ['/login/status (当前登录态)', () => api.client.weapi('/login/status', {})]
-  ];
-  for (const [name, fn] of probes) {
-    try {
-      const text = await fn();
-      let out = text;
-      try { out = JSON.stringify(JSON.parse(text)).slice(0, 300); } catch (_) { out = String(text).slice(0, 300); }
-      console.log(`${name}\n  -> ${out}\n`);
-    } catch (e) {
-      console.log(`${name}\n  -> ERROR ${e.kind || ''} ${e.message}\n`);
-    }
-  }
-})();
+  console.log('端点：weapi /login/cellphone   手机号尾号：' + String(phone).slice(-4));
+
+  // 1) 内核当前的尝试顺序：明文 → 502 再试 MD5
+  const r = await api.cellphoneLogin(phone, password);
+  show('内核 cellphoneLogin →', r);
+
+  // 2) 直接看明文一次的真实返回（内核会吞掉第一次的结果，这里单独打）
+  const raw = await api.client.weapi('/login/cellphone', {
+    phone: String(phone),
+    password: String(password),
+    captcha: '',
+    verifyCode: ''
+  });
+  show('明文直连 →', JSON.parse(raw));
+
+  // 3) MD5 一次
+  const cryptoMod = require(path.join(repo, 'www', 'kumone', 'lib', 'crypto.js'));
+  const md5 = (cryptoMod.md5hex || cryptoMod.default && cryptoMod.default.md5hex || (s => s))(String(password));
+  const raw2 = await api.client.weapi('/login/cellphone', {
+    phone: String(phone),
+    password: md5,
+    captcha: '',
+    verifyCode: ''
+  });
+  show('MD5 直连 →', JSON.parse(raw2));
+})().catch((e) => {
+  console.log('请求失败：', e && e.message ? e.message : String(e));
+  process.exit(1);
+});

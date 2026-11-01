@@ -42,6 +42,46 @@ Issue 与 spec 以 markdown 文件存放在 `.scratch/`（本地文件追踪）�
 
 **颜色即角色**：一个颜色只承载一种含义，不做装饰。品牌红 `#fa2d48` 已停用（那是 Apple Music 的语言）。当前项用重墨 + 强描边，不用颜色。
 
+### 导航（一级菜单只有三键）
+
+底部只有 **主页 / 广播 / 搜索**。「我的」**不在一级菜单** —— 用户报过「一直点错」。
+
+「我的」在顶栏左上角，一个**常驻**的小圆按钮（列表图标），点开是底部抽屉：
+
+| 位置 | 是什么 |
+| --- | --- |
+| 顶栏左上角 | 常驻「我的」图标 → 「我的」抽屉（进二级页时让位给返回箭头） |
+| 顶栏右上角 | 账号胶囊（头像 + 昵称 + VIP）→ 退出登录（带确认框）；**未登录时是「登录」按钮** |
+
+顶栏左边是一个**固定 32px 的槽位**，返回箭头与「我的」图标**叠在里面二选一**：
+
+- 两个按钮不能各占一格 —— 看不见的那个若还占位置，会把「我的」顶到离屏幕边缘约 52px（用户说「不符合人类审美」）。
+- 槽位固定宽度，标题才能**相对屏幕真正居中**（`#m-title` 绝对定位 + `translateX(-50%)`）；跟着剩余空间居中会明显偏左。
+
+右上角**只用来登录**：点它进登录页；已登录时登录页显示「已登录：昵称」+ **退出登录** / **切换账号**。点头像直接掉登录态太容易误触。
+
+抽屉里：我的歌单 / 收藏的专辑 / 喜欢的音乐 / 云盘 / 最近播放 / 听歌排行 / 退出登录。抽屉与「我的」页面（`M.views.library`）**共用同一份入口集合**（`M.mine.buildEntries`）—— 同一个入口集合写两遍，迟早出现两个真相。
+
+### 转场：目标页必须先就绪，且必须是「一层压住另一层」
+
+**转场动画不能给用户看「半成品页面」。** 真机录屏里那批白方块就是这么来的：返回主页时主页正在重新加载，骨架屏 + 没加载出来的封面块叠在还没走完的播放页上。
+
+规则：
+
+- 有缓存的页面（视图声明 `cacheable: true`）→ **同步还原**，不等下一帧；
+- 没有缓存的页面（第一次进）→ **动画立刻起**，内容在动画里就地长出来（占位 → 真内容）。
+  **不要等数据**：等下去点下去就是「卡一下才动」，那才叫突兀；
+- 转场与左滑**只跟位移，不跟透明度** —— 整页淡出时白卡片会变成半透明的「白方块」在灰底上飘；
+- **新页面在转场期间是一块不透明的整屏面板**（`background: var(--canvas)` + 满高），
+  旧页面带**视差**往反方向挪 14%。不这么做的话，新页面是透明的，
+  旧页面的字会从它的字缝里透出来 —— 两页文字撞在一起，看着特别怪；
+- 位移要**够大**（进 38% / 出 14%）：26px 的微移看着像「啪」一下跳变；
+- 缓存页面还原后调 `__refresh` 钩子**后台静默刷新**（先显示旧内容，数据到了就地更新）。
+
+可缓存的视图：详情页（歌单 / 歌手 / 专辑）、主页、广播、搜索、我的。**不可缓存**：播放页（有订阅）、登录页（有轮询）。
+
+**占位形状要跟真实内容一样**：详情页以前用通用的方块网格（2×2），而详情页根本没有网格布局 —— 那一屏大白方块看着就像界面坏了。现在用 `ui.skeletonDetail()`（头图 + 若干行）。
+
 ## 项目分层
 
 | 层 | 位置 | 约定 |
@@ -61,8 +101,9 @@ Issue 与 spec 以 markdown 文件存放在 `.scratch/`（本地文件追踪）�
 | `Mobile.snapshot(opts?)` | 当前界面的语义文本树。`opts.scope='subtree'` + `opts.root='@N'` 取子树 |
 | `Mobile.act(ref, action, args?)` | 对 ref 执行动作。白名单：`click` / `scroll` / `focus` / `fill` |
 | `Mobile.nav/back/goTab(view)` | 导航栈（与上游语义一致）。`back` 带转场动画；`back({skipGhost:true})` 用于手势接管的场景 |
-| `Mobile.views[type]` | 视图注册表，值形如 `{ title, render(view) }` |
-| `Mobile.shell.toast(msg)` / `setMini(track)` / `setMiniProgress(ratio)` | 外壳操作 |
+| `Mobile.slidePrepare()` / `slideFollow(dx)` / `slideBack()` / `slideOutRight(cb)` | 边缘左滑手势的四步。**只跟位移，不跟透明度** —— 整页淡出时白卡片会变成半透明的「白方块」 |
+| `Mobile.views[type]` | 视图注册表，值形如 `{ title, render(view) }`；加 `cacheable: true` 表示该视图离开后可被**停放进缓存**、返回时直接还原（只能给没有订阅 / 没有轮询的视图用） |
+| `Mobile.shell.toast(msg)` / `setMini(track)` / `setMiniProgress(ratio)` | 外壳操作（`setMini` 认 `track.cover` 与 `track.album.picUrl` 两种封面形状） |
 | `Mobile.errors.make(code, parts)` / `fromKernel(err, ctx)` / `retryable(err)` | 错误契约 |
 | `Mobile.lyrics.build({lrc,tlyric,yrc})` / `parseLrc` / `parseYrc` / `activeIndex(lines,t)` | 歌词解析（纯函数，逐字优先） |
 | `Mobile.service.loginByPassword(phone, pwd)` | 手机号 + 密码登录；密码不落盘 |
@@ -71,7 +112,8 @@ Issue 与 spec 以 markdown 文件存放在 `.scratch/`（本地文件追踪）�
 | `Mobile.service.createPlaylist(name)` / `addToPlaylist(pid, ids)` | 建歌单 / 加歌单 |
 | `Mobile.service.subscribeAlbum(id, on)` / `likedAlbums()` | 收藏专辑 / 收藏的专辑列表 |
 | `Mobile.actions.addToPlaylist(track)` / `newPlaylist(onDone)` | 打开「加入歌单」抽屉 / 新建歌单 |
-| `Mobile.ui.sheet({title})` | 底部抽屉（加入歌单、新建歌单用；不切页面） |
+| `Mobile.actions.openMine()` | 打开「我的」：未登录 → 拉起扫码；已登录 → 底部抽屉（我的歌单 / 收藏的专辑 / … / 退出登录） |
+| `Mobile.ui.sheet({title})` | 底部抽屉（加入歌单、新建歌单、「我的」用；不切页面） |
 | `Mobile.gesture.attach()` / `detach()` | 边缘左滑返回手势 |
 | `Mobile.systemBack()` | 系统返回键：有历史就返回上一页，没有就退出 App |
 | `window.kumone.invoke(channel, args)` | 内核门面（网易云能力入口） |
@@ -92,12 +134,25 @@ npm run test:login:view     # 登录页双 Tab 自检（Edge headless）
 npm run test:detail:view    # 歌单/榜单详情自检（Edge headless）
 npm run test:mine:view      # 我的歌单/收藏专辑/播放模式自检（Edge headless）
 npm run test:back:view      # 边缘左滑返回与转场自检（Edge headless）
+npm run test:back:restore   # 返回时还原上一页、不退回骨架屏（Edge headless）
+npm run test:mini:cover     # 迷你播放条的真实封面（Edge headless）
 npm run build:android       # 需本机 Android 环境
 ```
 
 给手机装 APK：推送版本 tag → GitHub Actions 云端构建 → 从 Releases 下载安装（仓库需公开）。
 
 > `test/verify-crypto.js` 默认与仓库内的加密基线比对；若要跟原始 Node 内核逐字节对照，把路径放进环境变量 `KUMONE_ORIGINAL_KERNEL`。基线更新必须显式执行 `node test/verify-crypto.js --update`。
+
+## 安卓原生层
+
+| 文件 | 作用 |
+| --- | --- |
+| `HTTPClientPlugin.java` | 绕 CORS 的原生 HTTP 插件（内核门面走它） |
+| `BackPlugin.java` | 退出 App |
+| `MediaPlugin.java` | 播放状态的原生出口（`KumoneMedia.publish()`）；系统媒体键 / 通知栏按钮回程走 `bridge.eval` |
+| `PlaybackService.java` | **前台服务**（`foregroundServiceType=mediaPlayback`）+ 框架自带 `MediaSession`：后台播放保活、锁屏与通知栏控制。零新依赖 |
+
+界面层在安卓上**不用** `navigator.mediaSession`（原生已接管，否则会出现两条媒体通知）；浏览器里才用。
 
 ## 约定与坑
 

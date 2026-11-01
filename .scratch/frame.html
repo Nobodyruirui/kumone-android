@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<title>抽帧</title>
+<style>
+  html, body { margin: 0; padding: 0; background: #000; }
+  video { display: block; width: 390px; }
+</style>
+</head>
+<body>
+<!--
+  精确抽帧：把录屏 seek 到指定秒数再截图。
+  ?t=1.05  —— 要看的那一帧
+-->
+<video id="v" src="/.scratch/screen.mp4" muted playsinline preload="auto"></video>
+<script>
+var v = document.getElementById('v');
+var t = Number((location.search.match(/t=([\d.]+)/) || [])[1] || 1);
+var done = false;
+v.addEventListener('loadedmetadata', function () {
+  v.currentTime = t;
+});
+v.addEventListener('seeked', function () {
+  if (done) return;
+  done = true;
+  document.title = 'ready@' + t;
+});
+// 兜底：有些时候 seeked 不触发
+setTimeout(function () {
+  try { v.currentTime = t; } catch (e) {}
+}, 400);
+</script>
+</body>
+</html>

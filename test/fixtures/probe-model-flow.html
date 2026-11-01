@@ -34,7 +34,7 @@ function finish() {
   var okAll = failures.length === 0;
   out.setAttribute('data-result', okAll ? 'PASS' : 'FAIL');
   out.textContent = (okAll ? 'PASS ' : 'FAIL ') +
-    (okAll ? '模型序列跑通：进资料库 → 点喜欢的音乐 → 播放' : ('失败项：' + failures.join('；')));
+    (okAll ? '模型序列跑通：打开「我的」 → 点喜欢的音乐 → 播放' : ('失败项：' + failures.join('；')));
 }
 function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
 
@@ -91,17 +91,17 @@ async function run() {
     ok('snapshot 返回 ok', snap.ok === true);
     ok('快照带视图标记', /view "/.test(snap.tree));
 
-    /* --- 2. 进资料库 --- */
-    var libRef = findRef(snap.tree, 'button', '资料库');
-    ok('快照里找得到「资料库」', !!libRef);
-    if (!libRef) { finish(); return; }
+    /* --- 2. 打开「我的」（顶栏左上角的一次性入口） --- */
+    var mineRef = findRef(snap.tree, 'button', '我的歌单与收藏');
+    ok('快照里找得到「我的」入口', !!mineRef);
+    if (!mineRef) { finish(); return; }
 
-    var r1 = M.act(libRef, 'click');
-    ok('act 点资料库有回执', r1.ok === true, JSON.stringify(r1));
+    var r1 = M.act(mineRef, 'click');
+    ok('act 点「我的」有回执', r1.ok === true, JSON.stringify(r1));
     await wait(500);
 
     var snap2 = M.snapshot();
-    ok('进到资料库了', /view "library"/.test(snap2.tree));
+    ok('「我的」抽屉开了（里面有我的歌单）', /我的歌单/.test(snap2.tree), snap2.tree.slice(0, 200));
 
     /* --- 3. 点喜欢的音乐 --- */
     var likedRef = findRef(snap2.tree, 'button', '喜欢的音乐');

@@ -17,11 +17,13 @@
     back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4 7 12l8 8"/></svg>'
   };
 
-  // 底部导航四项：主页 / 广播 / 资料库 / 搜索
+  // 底部导航三项：主页 / 广播 / 搜索
+  //
+  // 「我的」**不在一级菜单里**：用户报过「一直点错」，也报过「找不到歌单和收藏在哪」。
+  // 它收在顶栏左上角（常驻图标），点开是「我的」抽屉。
   var TABS = [
     { view: 'home', label: '主页', icon: SVG.home },
     { view: 'fm', label: '广播', icon: SVG.radio },
-    { view: 'library', label: '资料库', icon: SVG.library },
     { view: 'search', label: '搜索', icon: SVG.search }
   ];
 
@@ -34,7 +36,12 @@
         else n.setAttribute(k, attrs[k]);
       });
     }
-    if (html != null) n.innerHTML = html;
+    // 第三个参数可以是字符串，也可以是**元素**；
+    // 传元素时走 appendChild —— 走 innerHTML 会渲染成「[object HTMLButtonElement]」。
+    if (html != null) {
+      if (html.nodeType === 1 || html.nodeType === 11) n.appendChild(html);
+      else n.innerHTML = html;
+    }
     return n;
   }
 
@@ -44,11 +51,27 @@
     var main = document.getElementById('m-main');
     var h = el('header', { id: 'm-header', role: 'banner' });
     h.innerHTML =
+      // 左边是一个**固定宽度**的槽位：返回箭头与「我的」图标二选一。
+      // （早先两个按钮各占一格，而看不见的那个还占着位置，
+      //   把「我的」顶到了离屏幕边缘半厘米的地方。）
+      '<div id="m-left">' +
       '<button id="m-back" type="button" aria-label="返回">' + SVG.back + '</button>' +
+      // 左上角常驻的「我的」：点开是抽屉（我的歌单 / 收藏的专辑 / …）
+      '<button id="m-mine" type="button" class="m-mine-btn" aria-label="我的歌单与收藏">' +
+      '<span class="m-mine-ico" aria-hidden="true">' + SVG.library + '</span>' +
+      '</button>' +
+      '</div>' +
       '<div id="m-title" role="heading" aria-level="1"></div>' +
       '<div id="m-header-right"></div>';
     main.insertBefore(h, main.firstChild);
     h.querySelector('#m-back').addEventListener('click', function () { M.back(); });
+
+    var chip = h.querySelector('#m-mine');
+    if (chip) {
+      chip.addEventListener('click', function () {
+        if (M.actions && M.actions.openMine) M.actions.openMine();
+      });
+    }
   }
 
   function buildNav() {
@@ -121,9 +144,20 @@
       else b.removeAttribute('aria-current');
     });
 
-    // 返回箭头：有历史才显示
+    // 「我的」不是一级菜单，所以没有底部导航项可点亮 ——
+    // 这时候把右上角账号胶囊标成当前项（模型也能看出「现在在「我的」里」）
+    var acc = document.getElementById('m-account');
+    if (acc) {
+      if (rootType === 'library') acc.setAttribute('aria-current', 'page');
+      else acc.removeAttribute('aria-current');
+    }
+
+    // 左槽是「二选一」：根页面显示常驻的「我的」图标，有历史时让位给返回箭头。
+    var isRoot = !(M.state.history && M.state.history.length);
     var back = document.getElementById('m-back');
-    if (back) back.classList.toggle('visible', !!(M.state.history && M.state.history.length));
+    if (back) back.classList.toggle('visible', !isRoot);
+    var chip = document.getElementById('m-mine');
+    if (chip) chip.classList.toggle('visible', isRoot);
 
     // 全屏播放页：占满屏幕，底部导航与迷你条都要消失（ADR-0002）
     // 隐藏逻辑放在外壳层，任何视图都能要求「藏起外壳」，视图自己不碰。
@@ -151,6 +185,19 @@
     document.body.classList.toggle('m-focus', !!on);
   }
 
+  /**
+   * 取曲目的封面地址。
+   *
+   * 两种形状都要认（真机踩过）：
+   *   · 播放状态快照：封面在 `cover` 上（引擎的 coverOf 已经算好了）
+   *   · 归一化后的曲目：封面在 `album.picUrl` 上，**没有** `cover` 字段
+   * 只看 `track.cover` 的话，迷你条永远拿不到封面（真机报「播放框没有专辑封面」）。
+   */
+  function coverOfTrack(track) {
+    if (!track) return null;
+    return track.cover || (track.album && track.album.picUrl) || null;
+  }
+
   // 迷你播放条内容
   function setMini(track) {
     var cover = document.getElementById('m-mini-cover');
@@ -164,7 +211,7 @@
       artist.textContent = '';
       return;
     }
-    M.ui.setCover(cover, track.cover, 96);
+    M.ui.setCover(cover, coverOfTrack(track), 96);
     cover.setAttribute('alt', track.name + ' 封面');
     title.textContent = track.name;
     // 归一化后的曲目里艺人是数组；播放状态快照里是字符串，两种都兜住
@@ -186,15 +233,31 @@
   /* ---------------------------------------------------------- 账号区 */
 
   /**
-   * 顶栏右上角的账号入口：头像 + 昵称。
-   * 未登录时清空（留一个空的槽，不显示假账号）。
+   * 顶栏右上角：登录后是头像 + 昵称（点开「我的」），没登录是「登录」按钮。
+   *
+   * 为什么没登录也要留一个入口：资料库移出一级菜单后，
+   * 「登录」与「我的」都只剩顶栏这一条路 —— 这里空了，路就断了。
+   *
    * @param {object|null} account { nickname, avatarUrl }
    */
   function setAccount(account) {
     var host = document.getElementById('m-header-right');
     if (!host) return;
     host.textContent = '';
-    if (!account) { host.classList.remove('has-account'); return; }
+    if (!account) {
+      host.classList.remove('has-account');
+      var login = el('button', {
+        id: 'm-login',
+        type: 'button',
+        class: 'm-login-btn',
+        'aria-label': '登录'
+      }, '登录');
+      login.addEventListener('click', function () {
+        if (M.actions && M.actions.toLogin) M.actions.toLogin(null);
+      });
+      host.appendChild(login);
+      return;
+    }
 
     var who = account.nickname || '账号';
     var b = el('button', {
@@ -216,7 +279,9 @@
       b.appendChild(el('span', { class: 'm-account-vip', 'aria-label': 'VIP 会员' }, 'VIP'));
     }
     b.addEventListener('click', function () {
-      if (M.actions && M.actions.confirmLogout) M.actions.confirmLogout();
+      // 右上角只用来「登录 / 账号」：登录状态与退出登录都在登录页里。
+      // 早先点头像直接掉登录态 —— 太容易误触（用户原话：右上角只用来登录）。
+      if (M.actions && M.actions.toLogin) M.actions.toLogin(null);
     });
     host.appendChild(b);
     host.classList.add('has-account');

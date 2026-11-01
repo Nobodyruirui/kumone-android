@@ -66,6 +66,9 @@
       t0: Date.now(),
       active: false
     };
+    // 底下先摆好上一页（有缓存的话）：拖动时能看见它，原生返回手势就是这个手感
+    var M = getMobile();
+    if (M && M.slidePrepare) M.slidePrepare();
   }
 
   function onTouchMove(e) {
@@ -111,6 +114,8 @@
 
     // 不够远：弹回原位
     if (M.slideBack) M.slideBack();
+    // 底下那一页没被用上：搬回缓存
+    if (M.slideRestorePrev) M.slideRestorePrev();
   }
 
   /** 装上手势。 */

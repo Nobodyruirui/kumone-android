@@ -14,7 +14,7 @@
   自检探针：以「模型」的视角驱动这个 App。
   验证：
     1. Mobile.snapshot() 能拿到带稳定 ref 的语义树
-    2. Mobile.act(ref, 'click') 能真的驱动界面（切到资料库）
+    2. Mobile.act(ref, 'click') 能真的驱动界面（打开「我的」抽屉）
     3. 用过期 ref 操作时，返回的是稳定错误码 + 五要素消息（含"下一步该干什么"），
        而不是一句抱怨或静默失败
 -->
@@ -44,26 +44,25 @@ async function run() {
   try {
     var M = frame.contentWindow.Mobile;
 
-    // 1. 快照拿到导航按钮的 ref
+    // 1. 快照拿到「我的」入口的 ref
     var snap = M.snapshot();
     if (!snap.ok) return finish(false, 'snapshot 未返回 ok');
-    var ref = findRef(snap.tree, 'button', '资料库');
-    if (!ref) return finish(false, '快照里找不到「资料库」按钮的 ref');
+    var ref = findRef(snap.tree, 'button', '我的歌单与收藏');
+    if (!ref) return finish(false, '快照里找不到「我的」入口的 ref');
 
-    // 2. 点击它，界面应当切到资料库
+    // 2. 点击它，界面应当打开「我的」抽屉
     //    注意两件事：
-    //    a) 资料库有 guard —— 未登录时点它会直接拉起扫码（ticket 10 的新契约），
-    //       这里先假装已登录，单独验证「act 能不能真的驱动界面」；
+    //    a) 「我的」要登录态才能开内容 —— 这里先假装已登录，单独验证「act 能不能真的驱动界面」；
     //       「未登录 → 拉起扫码」由 test/library-view.mjs 负责。
-    //    b) guard 是异步的（要先问登录态），所以点完要等一拍再断言。
+    //    b) 登录态是异步的（要先问登录态），所以点完要等一拍再断言。
     M.service.isLoggedIn = function () { return Promise.resolve(true); };
     var receipt = M.act(ref, 'click');
     if (!receipt.ok) return finish(false, 'act 失败：' + JSON.stringify(receipt));
 
-    await wait(300);
+    await wait(400);
     var snap2 = M.snapshot();
-    if (!/view "library"/.test(snap2.tree)) {
-      return finish(false, '点击后没有切到资料库视图');
+    if (!/我的歌单/.test(snap2.tree)) {
+      return finish(false, '点击后没有打开「我的」抽屉');
     }
 
     // 3. 过期 ref 必须给出稳定错误码 + 五要素
@@ -84,7 +83,7 @@ async function run() {
     }
 
     finish(true,
-      'ref=' + ref + ' 点击后进入资料库；过期 ref 返回 ' + bad.code + '；未知动作返回 ' + nope.code);
+      'ref=' + ref + ' 点击后打开「我的」抽屉；过期 ref 返回 ' + bad.code + '；未知动作返回 ' + nope.code);
   } catch (e) {
     finish(false, '异常：' + (e && e.message ? e.message : String(e)));
   }

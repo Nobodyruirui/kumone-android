@@ -115,14 +115,14 @@ async function run() {
 
     ok('已登录进资料库', M.state.view.type === 'library', M.state.view.type);
 
-    var NAMES = ['播放列表', '喜欢的音乐', '收藏的专辑', '云盘', '最近播放', '听歌排行'];
+    var NAMES = ['我的歌单', '收藏的专辑', '喜欢的音乐', '云盘', '最近播放', '听歌排行'];
     var snap = M.snapshot();
     NAMES.forEach(function (n) {
       ok('入口「' + n + '」带 ref', !!findRef(snap.tree, 'button', n));
     });
-    ok('六个入口都在', doc.querySelectorAll('#m-view .m-list-row').length === 6,
+    ok('六个入口 + 退出登录都在', doc.querySelectorAll('#m-view .m-list-row').length === 7,
       '实际 ' + doc.querySelectorAll('#m-view .m-list-row').length);
-    ok('角色色点按角色分配', doc.querySelectorAll('#m-view .m-list-dot').length === 6);
+    ok('角色色点按角色分配', doc.querySelectorAll('#m-view .m-list-dot').length === 7);
 
     // 摘要异步补上
     var subs = Array.prototype.map.call(doc.querySelectorAll('#m-view .m-list-row .m-track-sub'),
@@ -131,11 +131,11 @@ async function run() {
       JSON.stringify(subs));
     ok('摘要里带上了数量', subs.join(' ').indexOf('个歌单') >= 0, JSON.stringify(subs));
 
-    /* ------------------------------- 3. 点播放列表 → 我的歌单 */
+    /* ------------------------------- 3. 点我的歌单 → 我的歌单 */
 
-    var ref = findRef(M.snapshot().tree, 'button', '播放列表');
+    var ref = findRef(M.snapshot().tree, 'button', '我的歌单');
     var r = M.act(ref, 'click');
-    ok('点播放列表有回执', r.ok === true, JSON.stringify(r));
+    ok('点我的歌单有回执', r.ok === true, JSON.stringify(r));
     await wait(400);
     ok('进入我的歌单视图', M.state.view.type === 'myplaylists', M.state.view.type);
     ok('我的歌单列出了歌单',
@@ -193,7 +193,7 @@ async function run() {
       /听了 12 次/.test(doc.getElementById('m-view').textContent),
       doc.getElementById('m-view').textContent.slice(0, 120));
 
-    /* ------------------------------- 5. 账号区 + 退出登录 */
+    /* ------------------------------- 5. 账号区 → 登录页（右上角只用来登录） */
 
     await wait(300);
     var accBtn = doc.getElementById('m-account');
@@ -204,17 +204,30 @@ async function run() {
     ok('VIP badge', !!(doc.querySelector('#m-account .m-account-vip')));
     if (accBtn) {
       accBtn.click();
-      await wait(150);
-      ok('点了账号弹出确认框', doc.querySelectorAll('.m-modal').length === 1);
-      var okBtn = doc.querySelector('.m-modal .m-btn-primary');
-      ok('确认框有确定按钮', !!okBtn);
-      if (okBtn) {
-        okBtn.click();
-        await wait(400);
-        ok('退出后回到主页', M.state.view.type === 'home', M.state.view.type);
-        var loggedOut = M.service.calls.some(function (c) { return c.channel === 'logout'; });
-        ok('退出登录调了内核的 logout', loggedOut);
-        ok('退出后顶栏账号区清空', !doc.getElementById('m-account'));
+      await wait(700);
+      ok('点账号进登录页（右上角只用来登录）', M.state.view.type === 'login', M.state.view.type);
+      var viewText = doc.getElementById('m-view').textContent;
+      ok('登录页显示「已登录」', viewText.indexOf('已登录') >= 0, viewText.slice(0, 120));
+      ok('登录页有「退出登录」', !!doc.querySelector('#m-view [aria-label="退出登录"]'));
+      ok('登录页有「切换账号」', !!doc.querySelector('#m-view [aria-label="切换账号"]'));
+
+      // 退出登录走登录页里那个按钮
+      var logoutBtn = doc.querySelector('#m-view [aria-label="退出登录"]');
+      if (logoutBtn) {
+        logoutBtn.click();
+        await wait(500);
+        ok('点退出登录弹确认框', doc.querySelectorAll('.m-modal').length === 1,
+          '确认框数 ' + doc.querySelectorAll('.m-modal').length);
+        var okBtn = doc.querySelector('.m-modal .m-btn-primary');
+        ok('确认框有确定按钮', !!okBtn);
+        if (okBtn) {
+          okBtn.click();
+          await wait(600);
+          ok('退出后回到主页', M.state.view.type === 'home', M.state.view.type);
+          var loggedOut = M.service.calls.some(function (c) { return c.channel === 'logout'; });
+          ok('退出登录调了内核的 logout', loggedOut);
+          ok('退出后顶栏账号区清空', !doc.getElementById('m-account'));
+        }
       }
     }
 

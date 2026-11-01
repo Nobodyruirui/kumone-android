@@ -19,6 +19,8 @@
 
   M.views.fm = {
     title: '广播',
+    // 同主页：离开后停放，返回时直接还原（没有订阅与轮询，放着安全）。
+    cacheable: true,
 
     render: function () {
       var frag = document.createDocumentFragment();

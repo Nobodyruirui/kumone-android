@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<title>Kumone 返回还原自检</title>
+<style>
+  body { font: 13px/1.6 system-ui, sans-serif; margin: 20px; }
+  iframe { width: 390px; height: 760px; border: 1px solid #ddd; }
+  pre { background: #0a0a0a; color: #e8e8ea; padding: 12px; border-radius: 10px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<!--
+  自检探针：返回时不要退回骨架屏（真机报「左滑出现白色方块」）。
+
+  现象：左滑返回时，页面先回到骨架屏（4 个白色方块），再慢慢出内容。
+
+  断言：
+    1. 返回后 60ms 内，上一页的内容已经在（不是骨架屏）
+    2. 返回后不重新发起详情请求（数据没被重复拉）
+    3. 骨架屏本身不再是「白方块」：底色不是纯白
+-->
+<iframe id="app" src="/www/index.html"></iframe>
+<pre id="result" data-result="PENDING">PENDING</pre>
+
+<script>
+var out = document.getElementById('result');
+var failures = [];
+function ok(name, cond, extra) {
+  if (!cond) failures.push(name + (extra ? ' :: ' + extra : ''));
+}
+function finish() {
+  var okAll = failures.length === 0;
+  out.setAttribute('data-result', okAll ? 'PASS' : 'FAIL');
+  out.textContent = (okAll ? 'PASS ' : 'FAIL ') +
+    (okAll ? '返回还原自检通过' : ('失败项：' + failures.join('；')));
+}
+function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+function isWhite(str) {
+  var rgb = String(str || '').match(/\d+(\.\d+)?/g);
+  if (!rgb || rgb.length < 3) return false;
+  return Number(rgb[0]) >= 250 && Number(rgb[1]) >= 250 && Number(rgb[2]) >= 250;
+}
+/** 合成触摸事件（驱动边缘左滑手势）。 */
+function touch(el, type, x, y) {
+  var t = new frame.contentWindow.Touch({
+    identifier: 1, target: el, clientX: x, clientY: y, pageX: x, pageY: y
+  });
+  var ev = new frame.contentWindow.TouchEvent(type, {
+    touches: type === 'touchend' ? [] : [t],
+    targetTouches: type === 'touchend' ? [] : [t],
+    changedTouches: [t],
+    bubbles: true,
+    cancelable: true
+  });
+  el.dispatchEvent(ev);
+}
+
+var frame = document.getElementById('app');
+frame.addEventListener('load', function () { setTimeout(run, 700); });
+
+async function run() {
+  try {
+    var W = frame.contentWindow;
+    var M = W.Mobile;
+    var doc = W.document;
+
+    var calls = 0;
+    // 假服务：慢一点返回，好让我们看清「返回时有没有重新拉」
+    M.service.playlistDetail = function (id) {
+      calls++;
+      return new Promise(function (resolve) {
+        setTimeout(function () {
+          resolve({
+            ok: true,
+            data: {
+              playlist: {
+                id: id,
+                name: '测试歌单 ' + id,
+                cover: 'https://p1.music.126.net/pl' + id + '.jpg',
+                trackCount: 3,
+                playCount: 100,
+                creator: { nickname: 'nobody' }
+              },
+              tracks: [
+                { id: 1, name: '歌曲一', artists: [{ id: 9, name: '方大同' }],
+                  album: { id: 8, name: '黑白', picUrl: 'https://p1.music.126.net/s1.jpg' },
+                  durationMS: 200000 },
+                { id: 2, name: '歌曲二', artists: [{ id: 9, name: '方大同' }],
+                  album: { id: 8, name: '黑白', picUrl: 'https://p1.music.126.net/s2.jpg' },
+                  durationMS: 200000 }
+              ],
+              trackIds: [],
+              total: 2
+            }
+          });
+        }, 500);
+      });
+    };
+
+    // 先进第一个歌单，等内容出来
+    M.nav({ type: 'playlist', id: 9001, name: '测试歌单 9001' });
+    await wait(900);
+    ok('第一个歌单有内容', doc.querySelectorAll('#m-view .m-track').length >= 2,
+       'tracks=' + doc.querySelectorAll('#m-view .m-track').length);
+    ok('第一个歌单没有骨架屏', doc.querySelectorAll('#m-view .m-skeleton').length === 0);
+    var callsAfterFirst = calls;
+
+    // 再进第二个歌单
+    M.nav({ type: 'playlist', id: 9002, name: '测试歌单 9002' });
+    await wait(900);
+    ok('第二个歌单有内容', doc.querySelectorAll('#m-view .m-track').length >= 2);
+
+    // 返回：应该立刻回到第一个歌单的内容，而不是骨架屏
+    M.back();
+    await wait(60);
+    var skelNow = doc.querySelectorAll('#m-view .m-skeleton').length;
+    ok('返回后 60ms 没有骨架屏（没有白色方块）', skelNow === 0, 'skeleton=' + skelNow);
+    ok('返回后内容已经在', doc.querySelectorAll('#m-view .m-track').length >= 2,
+       'tracks=' + doc.querySelectorAll('#m-view .m-track').length);
+
+    await wait(900);
+    ok('返回没有重新拉数据', calls === callsAfterFirst + 1,
+       'calls=' + calls + ' expected=' + (callsAfterFirst + 1));
+
+    // 骨架屏不该看起来像「白方块」：底色 / 渐变里都不能是纯白
+    var sk = doc.createElement('div');
+    sk.className = 'm-skeleton';
+    doc.body.appendChild(sk);
+    var cs = W.getComputedStyle(sk);
+    var bg = cs.backgroundColor || '';
+    var bgi = cs.backgroundImage || '';
+    ok('骨架屏底色不是纯白', !isWhite(bg), 'bg=' + bg);
+    ok('骨架屏渐变里没有纯白', !isWhite(bgi), 'bgi=' + bgi);
+    ok('骨架屏有虚线描边（一眼看出是占位，不是内容）', cs.borderTopStyle === 'dashed',
+       cs.borderTopStyle);
+    sk.remove();
+
+    /* ---------------- 白块加固：转场里可能露出来的底，一律不许是白 ---------------- */
+
+    var mainEl = doc.getElementById('m-main');
+    ok('#m-main 底色是画布色（转场露出的底不能是白）',
+       mainEl && !isWhite(W.getComputedStyle(mainEl).backgroundColor),
+       mainEl ? W.getComputedStyle(mainEl).backgroundColor : '（无）');
+
+    var prevEl = doc.getElementById('m-view-prev');
+    ok('#m-view-prev 底色是画布色（上一层容器不能透出白）',
+       prevEl && !isWhite(W.getComputedStyle(prevEl).backgroundColor),
+       prevEl ? W.getComputedStyle(prevEl).backgroundColor : '（无）');
+
+    // 封面：加载中时底色必须是灰的 —— 白色卡片里透出一个空白洞就是一个白方块
+    var coverEl = doc.querySelector('#m-mini-cover');
+    if (coverEl) {
+      var ccs = W.getComputedStyle(coverEl);
+      ok('封面底色不是纯白（加载中透出的是灰块）', !isWhite(ccs.backgroundColor),
+         ccs.backgroundColor);
+      ok('封面不靠 opacity 淡入（那会把白卡片露出来）',
+         parseFloat(ccs.opacity) > 0.95, ccs.opacity);
+    }
+
+    /* ---------------- 手势拖动：整页不许变透明 ----------------
+       以前 slideFollow 会带着透明度衰减（dx 越大越淡），
+       于是整页的白卡片在灰底上变成一片半透明的「白色方块」。 */
+
+    M.nav({ type: 'playlist', id: 9003, name: '测试歌单 9003' });
+    await wait(900);
+
+    var mainEl = doc.getElementById('m-main');
+    touch(mainEl, 'touchstart', 6, 400);
+    touch(mainEl, 'touchmove', 90, 402);
+    touch(mainEl, 'touchmove', 180, 404);
+
+    var opDuring = W.getComputedStyle(doc.getElementById('m-view')).opacity;
+    ok('拖动时整页不淡出（白卡片不会变成半透明白块）',
+       parseFloat(opDuring) > 0.95, opDuring);
+
+    var prevEl2 = doc.getElementById('m-view-prev');
+    ok('拖动时底下已经摆好上一页', prevEl2 && prevEl2.classList.contains('is-active'),
+       prevEl2 ? prevEl2.className : '（无）');
+    ok('底下那一页有内容（不是空壳）',
+       prevEl2 && prevEl2.querySelectorAll('.m-track').length >= 2,
+       prevEl2 ? '曲目行 ' + prevEl2.querySelectorAll('.m-track').length : '（无）');
+
+    touch(mainEl, 'touchend', 180, 404);
+    await wait(1000);
+    ok('左滑回到上一页', M.state.view.type === 'playlist', M.state.view.type);
+    ok('左滑后没有骨架屏（没有白色方块）',
+       doc.querySelectorAll('#m-view .m-skeleton').length === 0,
+       'skeleton=' + doc.querySelectorAll('#m-view .m-skeleton').length);
+    ok('左滑后内容已经在', doc.querySelectorAll('#m-view .m-track').length >= 2,
+       'tracks=' + doc.querySelectorAll('#m-view .m-track').length);
+
+    finish();
+  } catch (e) {
+    failures.push('异常：' + (e && e.message ? e.message : String(e)) +
+      ' @ ' + ((e && e.stack) ? String(e.stack).split('\n').slice(0, 4).join(' | ') : ''));
+    finish();
+  }
+}
+</script>
+</body>
+</html>

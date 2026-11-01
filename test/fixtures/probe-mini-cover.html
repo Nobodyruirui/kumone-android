@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<title>Kumone 迷你条封面自检</title>
+<style>
+  body { font: 13px/1.6 system-ui, sans-serif; margin: 20px; }
+  iframe { width: 390px; height: 760px; border: 1px solid #ddd; }
+  pre { background: #0a0a0a; color: #e8e8ea; padding: 12px; border-radius: 10px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<!--
+  自检探针：迷你播放条的专辑封面（用户报的真机问题）。
+
+  现象：迷你播放条左边永远是一个「音符占位图」，没有真实封面。
+
+  断言：
+    1. 归一化后的曲目（album.picUrl）→ 迷你条 <img> 的 src 是那张封面
+    2. 缩略尺寸参数带上了（?param=96y96），不下原图
+    3. 播放状态快照里的 cover 字段也有值（引擎侧口径一致）
+    4. 没有封面时退回占位图（不是浏览器默认裂图）
+-->
+<iframe id="app" src="/www/index.html"></iframe>
+<pre id="result" data-result="PENDING">PENDING</pre>
+
+<script>
+var out = document.getElementById('result');
+var failures = [];
+function ok(name, cond, extra) {
+  if (!cond) failures.push(name + (extra ? ' :: ' + extra : ''));
+}
+function finish() {
+  var okAll = failures.length === 0;
+  out.setAttribute('data-result', okAll ? 'PASS' : 'FAIL');
+  out.textContent = (okAll ? 'PASS ' : 'FAIL ') +
+    (okAll ? '迷你条封面自检通过' : ('失败项：' + failures.join('；')));
+}
+function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+var frame = document.getElementById('app');
+frame.addEventListener('load', function () { setTimeout(run, 700); });
+
+async function run() {
+  try {
+    var W = frame.contentWindow;
+    var M = W.Mobile;
+    var doc = W.document;
+
+    var COVER = 'https://p1.music.126.net/abc1234567890.jpg';
+
+    // 归一化后的曲目长这样：封面在 album.picUrl，不在 track.cover
+    var track = {
+      id: 111,
+      name: '黑白',
+      artists: [{ id: 2, name: '方大同' }],
+      album: { id: 3, name: '黑白', picUrl: COVER },
+      durationMS: 210000
+    };
+
+    // 1) 直接给迷你条塞曲目（同步读，避免被播放状态回写冲掉）
+    M.shell.setMini(track);
+    var img = doc.getElementById('m-mini-cover');
+    ok('迷你条有封面元素', !!img);
+    if (img) {
+      var src = img.getAttribute('src') || '';
+      var first = img.getAttribute('data-cdn-first') || '';
+      ok('迷你条封面指向真实封面', first.indexOf('abc1234567890.jpg') >= 0, 'first=' + first + ' src=' + src.slice(0, 60));
+      ok('迷你条封面带缩略尺寸参数', first.indexOf('param=96y96') >= 0, first);
+      ok('封面有 alt', (img.getAttribute('alt') || '').indexOf('黑白') >= 0, img.getAttribute('alt'));
+    }
+
+    // 2) 走真实链路：排队 → 引擎 emit → 外壳刷迷你条
+    M.service.songUrl = function () {
+      return Promise.resolve({ ok: true, data: { url: 'https://example.com/a.mp3', level: 'standard' } });
+    };
+    await M.player.playQueue([track], 0);
+    await wait(300);
+    var img3 = doc.getElementById('m-mini-cover');
+    var first3 = (img3 && img3.getAttribute('data-cdn-first')) || '';
+    ok('播放后迷你条请求的是真实封面', first3.indexOf('abc1234567890.jpg') >= 0, 'first=' + first3);
+    ok('播放后迷你条标题正确',
+       (doc.getElementById('m-mini-title') || {}).textContent === '黑白',
+       (doc.getElementById('m-mini-title') || {}).textContent);
+    ok('播放后迷你条艺人正确',
+       (doc.getElementById('m-mini-artist') || {}).textContent === '方大同',
+       (doc.getElementById('m-mini-artist') || {}).textContent);
+
+    // 没有封面时退回占位图，而不是裂图
+    M.shell.setMini({ id: 222, name: '无封面', artists: [], album: { id: 0, name: '', picUrl: null } });
+    await wait(80);
+    var img2 = doc.getElementById('m-mini-cover');
+    ok('无封面时用占位图兜底', (img2.getAttribute('src') || '').indexOf('data:image/svg') >= 0,
+       (img2.getAttribute('src') || '').slice(0, 60));
+
+    finish();
+  } catch (e) {
+    failures.push('异常：' + (e && e.message ? e.message : String(e)));
+    finish();
+  }
+}
+</script>
+</body>
+</html>

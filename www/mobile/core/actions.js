@@ -80,6 +80,45 @@
     return true;
   }
 
+  /* ---------------------------------------------------------- 我的 */
+
+  /**
+   * 打开「我的」。
+   *
+   * 两个入口都走这里：
+   *   · 顶栏左上角的一次性胶囊（用过一次就消失）
+   *   · 顶栏右上角的账号胶囊（常驻）
+   *
+   * 行为：没登录先拉起扫码；已登录就弹底部抽屉，
+   * 抽屉里是我的歌单 / 收藏的专辑 / 喜欢的音乐 / 云盘 / 最近播放 / 听歌排行 / 退出登录。
+   *
+   * 为什么不放一级菜单：用户报过「一直点错」，也报过「找不到歌单和收藏在哪」。
+   * 一级菜单只留「主页 / 广播 / 搜索」三键，我的东西收在顶栏。
+   */
+  function openMine() {
+    return Promise.resolve(M.service.isLoggedIn()).then(function (loggedIn) {
+      if (!loggedIn) {
+        M.nav({ type: 'login', resume: { view: 'library' } });
+        return false;
+      }
+      showMineSheet();
+      return true;
+    });
+  }
+
+  /** 「我的」抽屉。入口集合与「我的」页面共用一份（views/library.js 的 M.mine）。 */
+  function showMineSheet() {
+    var ui = M.ui;
+    if (!M.mine || typeof M.mine.buildEntries !== 'function') return null;
+    var panel = ui.sheet({ title: '我的' });
+    var built = M.mine.buildEntries({
+      logout: true,
+      onPick: function () { panel.close(); }
+    });
+    panel.setBody(built.list);
+    return panel;
+  }
+
   /**
    * 播放一组曲目（从第 index 首开始）。
    * 播放失败把契约错误摊成吐司 —— 失败要看得见，不能静默。
@@ -249,6 +288,8 @@
     refreshAccount: refreshAccount,
     confirmLogout: confirmLogout,
     addToPlaylist: addToPlaylist,
-    newPlaylist: newPlaylist
+    newPlaylist: newPlaylist,
+    openMine: openMine,
+    showMineSheet: showMineSheet
   };
 })(window.Mobile = window.Mobile || {});

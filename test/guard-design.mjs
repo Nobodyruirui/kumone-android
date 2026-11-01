@@ -81,11 +81,13 @@ function uiTotal(refs, base) {
 //   → 160KB（ticket 10 资料库：入口页 + 五个二级列表 + 账号区 + 确认弹窗）
 //   → 192KB（ticket 09 全屏播放页 + ticket 15 广播与搜索两屏）
 //   → 224KB（phone-fixes：歌词面板 + 账号登录双 Tab + 边缘手势与转场动画）
+//   → 240KB（phone-fixes-4：「我的」抽屉 + 一次性入口 + 页面缓存还原 + 后台播放桥）
+//   → 248KB（phone-fixes-4 二轮：转场分层（视差）+ 同形占位 + 登录态页面）
 //   每一档的涨幅都是实打实的界面代码，不是可以砍掉的冗余。
 //   这个闸是防「无节制地往界面层堆东西」，不是卡死一个具体数字。
 const LIMITS = [
-  { label: 'CSS', max: 48 * 1024, kind: 'css' },
-  { label: 'JS 界面与契约层', max: 224 * 1024, kind: 'ui' },
+  { label: 'CSS', max: 52 * 1024, kind: 'css' },
+  { label: 'JS 界面与契约层', max: 248 * 1024, kind: 'ui' },
   { label: 'JS 知识层', max: 32 * 1024, kind: 'knowledge' },
   { label: '字体', max: 128 * 1024, kind: 'fonts' }
 ];

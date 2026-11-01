@@ -31,11 +31,11 @@ body {
 img { -webkit-user-drag: none; }
 
 /* 封面统一兜底：取不到时用占位图，不显示浏览器默认的裂图
-   淡入：图片解码完成再显形，避免「一块块蹦出来」 */
+   底色是**灰的**：封面还没加载出来时，卡片里透出的不能是白色 ——
+   白色卡片上一个空白洞，看着就是一个「白色方块」（真机报过这个问题）。 */
 .m-cover {
-  background: var(--wash);
-  opacity: 0;
-  transition: opacity .25s ease;
+  background: var(--cover-blank);
+  opacity: 1;
 }
 .m-cover.is-loaded { opacity: 1; }
 .m-cover.is-missing { opacity: .9; }
@@ -55,6 +55,8 @@ img { -webkit-user-drag: none; }
   -webkit-overflow-scrolling: touch;
   /* 转场时的「上一层」要相对这里定位 */
   position: relative;
+  /* 画布色兜底：转场时露出来的底只能是灰的，绝不能是白的 */
+  background: var(--canvas);
   /* 给迷你播放条与底部导航让位 */
   padding-bottom: calc(var(--mini-h) + var(--nav-h) + var(--safe-b) + 20px);
 }
@@ -73,10 +75,30 @@ img { -webkit-user-drag: none; }
   overflow: hidden;
   pointer-events: none;
   visibility: hidden;
+  /* 旧页面底下的底色：灰的。白底会在转场里闪成一块白板。 */
+  background: var(--canvas);
   /* 与 #m-view 同 padding，旧页面在动画里不会横向跳一下 */
   padding: 0 16px 20px;
 }
 #m-view-prev.is-active { visibility: visible; }
+
+/* 页面缓存容器：离开的页面停在这里，等待被还原。
+   保持 connected（不 display:none）—— 这样在途的请求还能回填、
+   图片还能继续加载，回来时是「已经加载好的那一页」。 */
+#m-view-cache {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+#m-view-cache .m-page-cache {
+  position: absolute;
+  inset: 0;
+  /* 与 #m-view 同 padding：还原时不会横向跳一下 */
+  padding: 0 16px 20px;
+}
 
 /* ------------------------------------------------- 吸顶栏（大 → 小） */
 
@@ -93,43 +115,84 @@ img { -webkit-user-drag: none; }
   border-bottom: 1px solid var(--line);
 }
 
+/* 顶栏左槽：固定宽度，返回箭头与「我的」图标叠在里面二选一。
+   固定宽度是为了标题的居中不随页面跳动；两个按钮叠放是为了
+   「我的」贴着屏幕左边缘（早先看不见的返回箭头还占着位置，
+   把按钮顶到了离边缘半厘米的地方，看着别扭）。 */
+#m-left {
+  position: relative;
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+}
+
 #m-back {
+  position: absolute;
+  inset: 0;
+  display: none;
   width: 32px;
   height: 32px;
   border: 1px solid transparent;
   background: none;
   color: var(--ink);
-  display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   border-radius: var(--radius-pill);
   padding: 0;
-  visibility: hidden;
 }
-#m-back.visible { visibility: visible; }
+#m-back.visible { display: flex; }
 #m-back:active { background: var(--wash); }
 #m-back svg { width: 18px; height: 18px; }
 
+/* 左上角常驻的「我的」：一个小圆按钮（列表图标）。
+   跟返回箭头共用一个槽位：根页面显示它，有历史时让位给返回箭头。 */
+#m-mine {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+}
+#m-mine.visible { display: inline-flex; }
+#m-mine:active { background: var(--wash); }
+#m-mine .m-mine-ico { display: flex; width: 16px; height: 16px; }
+#m-mine .m-mine-ico svg { width: 16px; height: 16px; }
+
 #m-title {
-  flex: 1;
+  /* 标题相对**屏幕**居中，不是相对剩余空间 ——
+     左边是 32px 的槽位、右边是宽度不定的账号胶囊，
+     跟着剩余空间居中的话，标题会明显偏左。 */
+  position: absolute;
+  left: 50%;
+  max-width: 46%;
   text-align: center;
   font-size: var(--fs-sub);
   font-weight: 600;
   opacity: 0;
-  transform: translateY(4px);
+  transform: translate(-50%, 4px);
   transition: opacity var(--dur) var(--ease), transform var(--dur) var(--ease);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  pointer-events: none;
 }
 
-#m-header.compact #m-title { opacity: 1; transform: none; }
+#m-header.compact #m-title { opacity: 1; transform: translate(-50%, 0); }
 
 #m-header-right {
   /* 账号区要放得下「头像 + 昵称」，所以不能锁死 32px */
   min-width: 32px;
   max-width: 46%;
+  margin-left: auto;
   display: flex;
   justify-content: flex-end;
   align-items: center;
@@ -376,10 +439,15 @@ body.m-np #m-main { padding-bottom: 24px; }
 
 .m-skeleton {
   border-radius: var(--radius-card);
-  background: var(--surface);
-  border: 1px solid var(--line);
+  /* 占位块是**灰的**，而且描一圈虚线。
+     之前用 --surface（纯白）配 1px 实线，在浅灰画布上就是四个「白色方块」，
+     用户以为界面坏了（真机报「左滑出现莫名的白色方块」）。
+     虚线是明确信号：这是占位，不是内容。 */
+  background: linear-gradient(100deg, var(--line) 28%, var(--canvas) 48%, var(--line) 68%);
+  background-size: 240% 100%;
+  border: 1px dashed var(--ink-3);
   aspect-ratio: 1;
-  animation: m-pulse 1.6s ease-in-out infinite;
+  animation: m-shimmer 1.5s linear infinite;
 }
 .m-skeleton.skeleton-line {
   aspect-ratio: auto;
@@ -389,10 +457,26 @@ body.m-np #m-main { padding-bottom: 24px; }
   width: 68%;
 }
 
-@keyframes m-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+@keyframes m-shimmer {
+  0% { background-position: 120% 0; }
+  100% { background-position: -20% 0; }
 }
+
+/* 详情页的占位：形状跟真实内容一致（头图 + 若干行），
+   不用方块网格 —— 那一屏大白方块会被当成界面坏了。 */
+.m-skeleton-detail { display: flex; flex-direction: column; }
+.m-skeleton-head { display: flex; gap: 14px; align-items: flex-start; }
+.m-skeleton-cover {
+  width: 92px;
+  height: 92px;
+  flex-shrink: 0;
+  aspect-ratio: auto;
+}
+.m-skeleton-lines { flex: 1; display: flex; flex-direction: column; gap: 12px; padding-top: 6px; }
+.m-skeleton-lines .skeleton-line { margin-top: 0; width: 82%; }
+.m-skeleton-lines .skeleton-line-short { width: 52%; }
+.m-skeleton-row { padding: 13px 0; border-bottom: 1px solid var(--line); }
+.m-skeleton-row .skeleton-line { margin-top: 0; width: 62%; }
 
 /* --------------------------------------------------------------- 吐司 */
 
@@ -917,6 +1001,23 @@ body.m-np #m-main { padding-bottom: 24px; }
   color: var(--ink);
 }
 .m-account:active { background: var(--wash); }
+
+/* 未登录时的右上角：登录按钮。
+   资料库移出一级菜单后，「登录」与「我的」只剩顶栏这一条路，
+   这里空着就等于把登录路径堵死了。 */
+.m-login-btn {
+  height: 30px;
+  padding: 0 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  cursor: pointer;
+}
+.m-login-btn:active { background: var(--wash); }
 .m-account-avatar {
   width: 22px;
   height: 22px;
@@ -976,6 +1077,8 @@ body.m-np #m-main { padding-bottom: 24px; }
 /* 资料库入口行 */
 .m-list-item { display: block; }
 .m-list-row .m-track-main { flex: 1 1 auto; }
+/* 「退出登录」这类动作：弱一点，别跟内容入口抢注意力 */
+.m-list-row-quiet .m-track-name { color: var(--ink-2); font-weight: 600; }
 
 /* =============================================================
  * 全屏播放页

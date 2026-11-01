@@ -94,6 +94,49 @@
         var body = ui.el('div', { class: 'm-block-body' });
         panel.appendChild(body);
 
+        // 先问一次登录态：已登录就显示「当前账号 + 退出登录」，
+        // 别让用户对着一个已登录的账号再填一遍密码。
+        Promise.resolve(M.service.isLoggedIn()).then(function (loggedIn) {
+          if (!body.isConnected) return;
+          body.textContent = '';
+          if (loggedIn) paintSignedIn(body);
+          else paintSignInForm(body);
+        });
+      }
+
+      /* ---------------------------------------------- 已登录：账号 + 退出 */
+
+      function paintSignedIn(body) {
+        Promise.resolve(M.service.account()).then(function (r) {
+          if (!body.isConnected) return;
+          var acc = (r && r.ok && r.data) ? r.data : null;
+          var who = acc && acc.nickname ? acc.nickname : '当前账号';
+
+          var card = ui.el('div', { class: 'm-card m-login-card', role: 'group', 'aria-label': '当前账号' });
+          card.appendChild(ui.el('div', { class: 'm-login-ok' }, '已登录：' + who));
+          card.appendChild(ui.el('div', { class: 'm-login-note' },
+            '退出登录只清除本机缓存的登录状态'));
+          body.appendChild(card);
+
+          var actions = ui.el('div', { class: 'm-err-actions' });
+          actions.appendChild(ui.button('退出登录', '', function () {
+            if (M.actions && M.actions.confirmLogout) M.actions.confirmLogout();
+          }));
+          actions.appendChild(ui.button('切换账号', 'primary', function () {
+            Promise.resolve(M.service.logout()).then(function () {
+              if (M.actions && M.actions.refreshAccount) M.actions.refreshAccount();
+              if (!body.isConnected) return;
+              body.textContent = '';
+              paintSignInForm(body);
+            });
+          }));
+          body.appendChild(actions);
+        });
+      }
+
+      /* ---------------------------------------------- 未登录：手机号 + 密码 */
+
+      function paintSignInForm(body) {
         var phone = ui.el('input', {
           class: 'm-field',
           type: 'tel',
