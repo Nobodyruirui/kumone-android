@@ -14,17 +14,20 @@
     radio: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="2.4" fill="currentColor" stroke="none"/><path d="M8.2 8.2a5.4 5.4 0 0 0 0 7.6"/><path d="M15.8 15.8a5.4 5.4 0 0 0 0-7.6"/><path d="M5.4 5.4a9.4 9.4 0 0 0 0 13.2"/><path d="M18.6 18.6a9.4 9.4 0 0 0 0-13.2"/></svg>',
     library: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 5.6h16"/><path d="M4 10.6h16"/><path d="M4 15.6h9.5"/></svg>',
     search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="10.8" cy="10.8" r="6.4"/><path d="M15.6 15.6 20.4 20.4"/></svg>',
+    favorite: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20.2 4.6 13a4.6 4.6 0 0 1 6.5-6.5l.9.9.9-.9A4.6 4.6 0 1 1 19.4 13Z"/></svg>',
     back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4 7 12l8 8"/></svg>'
   };
 
-  // 底部导航三项：主页 / 广播 / 搜索
+  // 底部导航四项：主页 / 广播 / 搜索 / 收藏
   //
-  // 「我的」**不在一级菜单里**：用户报过「一直点错」，也报过「找不到歌单和收藏在哪」。
-  // 它收在顶栏左上角（常驻图标），点开是「我的」抽屉。
+  // 「收藏」是**独立的一级功能**（用户要求）：收藏的歌单 + 收藏的专辑，
+  // 不跟「登录 → 再进资料库」那条流程绑在一起。
+  // 「我的」（我创建的歌单 / 喜欢的音乐 / 云盘 / 最近播放 / 听歌排行）收在顶栏左上角。
   var TABS = [
     { view: 'home', label: '主页', icon: SVG.home },
     { view: 'fm', label: '广播', icon: SVG.radio },
-    { view: 'search', label: '搜索', icon: SVG.search }
+    { view: 'search', label: '搜索', icon: SVG.search },
+    { view: 'favorites', label: '收藏', icon: SVG.favorite }
   ];
 
   function el(tag, attrs, html) {
@@ -56,8 +59,8 @@
       //   把「我的」顶到了离屏幕边缘半厘米的地方。）
       '<div id="m-left">' +
       '<button id="m-back" type="button" aria-label="返回">' + SVG.back + '</button>' +
-      // 左上角常驻的「我的」：点开是抽屉（我的歌单 / 收藏的专辑 / …）
-      '<button id="m-mine" type="button" class="m-mine-btn" aria-label="我的歌单与收藏">' +
+      // 左上角常驻的「我的」：点开是抽屉（我创建的歌单 / 喜欢的音乐 / 云盘 / …）
+      '<button id="m-mine" type="button" class="m-mine-btn" aria-label="我的">' +
       '<span class="m-mine-ico" aria-hidden="true">' + SVG.library + '</span>' +
       '</button>' +
       '</div>' +
@@ -144,7 +147,7 @@
       else b.removeAttribute('aria-current');
     });
 
-    // 「我的」不是一级菜单，所以没有底部导航项可点亮 ——
+    // 「我的」不是一级菜单（收藏才是），所以没有底部导航项可点亮 ——
     // 这时候把右上角账号胶囊标成当前项（模型也能看出「现在在「我的」里」）
     var acc = document.getElementById('m-account');
     if (acc) {
@@ -152,12 +155,14 @@
       else acc.removeAttribute('aria-current');
     }
 
-    // 左槽是「二选一」：根页面显示常驻的「我的」图标，有历史时让位给返回箭头。
+    // 左槽：返回箭头（有历史时）与「我的」（**常驻**）并排。
+    // 「我的」任何页面都在 —— 进了二级页它也不消失：
+    // 用户报过「找不到歌单和收藏在哪」，入口不能时有时无。
     var isRoot = !(M.state.history && M.state.history.length);
     var back = document.getElementById('m-back');
     if (back) back.classList.toggle('visible', !isRoot);
     var chip = document.getElementById('m-mine');
-    if (chip) chip.classList.toggle('visible', isRoot);
+    if (chip) chip.classList.add('visible');
 
     // 全屏播放页：占满屏幕，底部导航与迷你条都要消失（ADR-0002）
     // 隐藏逻辑放在外壳层，任何视图都能要求「藏起外壳」，视图自己不碰。

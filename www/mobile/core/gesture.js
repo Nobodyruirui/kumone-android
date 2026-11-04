@@ -101,11 +101,11 @@
     var v = d.dx / dt;
 
     if (d.dx > w * RATIO || (v > VELOCITY && d.dx > 30)) {
-      // 够远了：把当前页推出去，然后换成上一页（从左边进来）
-      if (M.slideOutRight) {
-        M.slideOutRight(function () {
-          if (M.back) M.back({ direction: 'back', skipGhost: true });
-        });
+      // 够远了：当前页一次性推出去，上一页同时归位。
+      // 早先是「先推走（0.22s 空档）→ 再让上一页进来（0.3s）」两拍，
+      // 中间那一下空档就是用户说的「突兀」。
+      if (M.slideCommitBack) {
+        M.slideCommitBack(null);
       } else if (M.back) {
         M.back({ direction: 'back' });
       }
@@ -114,8 +114,11 @@
 
     // 不够远：弹回原位
     if (M.slideBack) M.slideBack();
-    // 底下那一页没被用上：搬回缓存
-    if (M.slideRestorePrev) M.slideRestorePrev();
+    // 底下那一页没被用上：**等弹回动画走完**再搬回缓存。
+    // 提前搬走的话，底下会空掉一下（页面凭空消失一瞬）。
+    setTimeout(function () {
+      if (M.slideRestorePrev) M.slideRestorePrev();
+    }, 280);
   }
 
   /** 装上手势。 */

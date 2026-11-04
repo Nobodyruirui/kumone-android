@@ -39,6 +39,7 @@
     "test:back:restore": "node test/back-restore-view.mjs",
     "test:mini:cover": "node test/mini-cover-view.mjs",
     "test:mine:entry": "node test/mine-entry-view.mjs",
+    "test:favorites": "node test/favorites-view.mjs",
     "test:transition:ready": "node test/transition-ready-view.mjs",
     "test:home": "node test/home-view.mjs",
     "test:library": "node test/library-view.mjs",

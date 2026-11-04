@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="UTF-8">
+<title>Kumone 界面取景</title>
+<style>
+  body { margin: 0; background: #1c1c1e; font: 13px/1.5 system-ui, sans-serif; color: #e8e8ea; }
+  .wrap { display: flex; flex-direction: column; align-items: center; padding: 18px; }
+  iframe { width: 390px; height: 760px; border: 0; border-radius: 22px; box-shadow: 0 18px 50px rgba(0,0,0,.55); background: #f4f4f6; }
+  .cap { margin-top: 10px; font-size: 15px; }
+</style>
+</head>
+<body>
+<!--
+  界面取景器：?state=favorites | mine-drawer | mine-page
+  驱动 App 到指定状态后停住，Edge headless 截的就是这一帧。
+-->
+<div class="wrap">
+  <iframe id="app" src="/www/index.html?relay=1"></iframe>
+  <div class="cap" id="cap">…</div>
+  <pre id="result" data-result="PENDING" style="display:none">PENDING</pre>
+</div>
+
+<script>
+var out = document.getElementById('result');
+var cap = document.getElementById('cap');
+var STATE = new URLSearchParams(location.search).get('state') || 'favorites';
+var frame = document.getElementById('app');
+var timer = setInterval(function () {
+  var W = frame.contentWindow;
+  if (!W || !W.Mobile) return;
+  clearInterval(timer);
+  run(W);
+}, 200);
+
+function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+async function run(W) {
+  try {
+    await wait(3500);
+    var doc = W.document;
+
+    if (STATE === 'favorites') {
+      var tab = doc.querySelector('#m-nav .m-tab[data-view="favorites"]');
+      if (tab) tab.click();
+      await wait(1200);
+      cap.textContent = '「收藏」一级功能（未登录：空态 + 去登录）';
+    } else if (STATE === 'login') {
+      var lb = doc.querySelector('#m-login');
+      if (lb) lb.click();
+      await wait(2500);
+      cap.textContent = '登录页（只有扫码，二维码是真的）';
+    } else if (STATE === 'mine-drawer') {
+      var mine = doc.getElementById('m-mine');
+      if (mine) mine.click();
+      await wait(1200);
+      cap.textContent = '顶栏左上角「我的」抽屉（不再被登录闸住）';
+    } else {
+      W.Mobile.goTab('library');
+      await wait(1200);
+      cap.textContent = '「我的」页面';
+    }
+
+    out.setAttribute('data-result', 'HELD');
+    out.textContent = 'HELD';
+  } catch (e) {
+    out.setAttribute('data-result', 'FAIL');
+    out.textContent = String(e && e.message || e);
+  }
+}
+</script>
+</body>
+</html>

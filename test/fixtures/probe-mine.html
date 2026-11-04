@@ -73,6 +73,7 @@ async function run() {
         { id: 12, name: '我的歌单二', cover: 'http://p1.music.126.net/b.jpg', creator: { nickname: '我' } }
       ] });
     };
+    M.service.createdPlaylists = M.service.myPlaylists;
     M.service.createPlaylist = function () {
       return Promise.resolve({ ok: true, data: { id: 99, name: '新建的歌单', cover: null } });
     };
@@ -169,18 +170,28 @@ async function run() {
     ok('「+」按钮有语义名（模型能点）',
       !!doc.querySelector('#m-view .m-track-add[aria-label^="加入歌单"]'));
 
-    /* ---------------- 5. 资料库与我的歌单 ---------------- */
+    /* ---------------- 5. 「我的」与「收藏」各管各的 ---------------- */
 
     M.goTab('library');
     await wait(600);
     var rows = Array.prototype.map.call(
       doc.querySelectorAll('#m-view .m-list-row'),
       function (b) { return b.getAttribute('aria-label'); });
-    ok('资料库有「收藏的专辑」入口', rows.indexOf('收藏的专辑') >= 0, rows.join(','));
+    ok('「我的」里有「我创建的歌单」', rows.indexOf('我创建的歌单') >= 0, rows.join(','));
+    ok('「我的」里不再有「收藏的专辑」（它归一级功能「收藏」）',
+      rows.indexOf('收藏的专辑') < 0, rows.join(','));
+
+    // 「收藏」是一级功能：底部导航第四键
+    M.goTab('favorites');
+    await wait(600);
+    ok('底部导航能进「收藏」', M.state.view.type === 'favorites', M.state.view.type);
+    var favText = doc.getElementById('m-view').textContent;
+    ok('「收藏」页有「收藏的歌单」', favText.indexOf('收藏的歌单') >= 0, favText.slice(0, 120));
+    ok('「收藏」页有「收藏的专辑」', favText.indexOf('收藏的专辑') >= 0, favText.slice(0, 120));
 
     M.nav({ type: 'myplaylists', label: '播放列表' });
     await wait(500);
-    ok('我的歌单页有「新建歌单」按钮',
+    ok('我创建的歌单页有「新建歌单」按钮',
       !!doc.querySelector('#m-view button[aria-label="新建歌单"]'));
 
     /* ---------------- 6. 专辑页收藏 ---------------- */

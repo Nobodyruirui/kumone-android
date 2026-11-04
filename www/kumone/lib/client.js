@@ -16,6 +16,36 @@
     'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36';
   var STORE_KEY = 'kumone.cookies';
 
+  /**
+   * 开发期直连代理（桌面浏览器验收用）。
+   *
+   * 网易云的 weapi **不返回 Access-Control-Allow-Origin**，所以浏览器里的
+   * fetch 会被 CORS 拦掉。安卓上靠自研的原生 HTTP 桥绕开；桌面浏览器里
+   * 用 tools/relay.mjs 这个本地代理顶替（代理自己带 cookie）。
+   *
+   * 开关：页面地址加 `?relay=1`。默认关着，不影响安卓与正式构建。
+   */
+  function relayBase() {
+    try {
+      if (typeof location !== 'undefined' && /[?&]relay=1(&|$)/.test(location.search || '')) {
+        return 'http://127.0.0.1:8123';
+      }
+    } catch (_e) {}
+    return '';
+  }
+
+  /**
+   * 请求地址：走代理时拼代理地址，否则直连上游域名。
+   * @param {string} host 上游域名（代理按这个头转发）
+   * @param {string} prefix 路径前缀（/weapi、/eapi）
+   * @param {string} path 业务路径
+   */
+  function endpoint(host, prefix, path) {
+    var relay = relayBase();
+    if (!relay) return 'https://' + host + prefix + path;
+    return relay + prefix + path;
+  }
+
   function getStore() {
     return typeof localStorage !== 'undefined' ? localStorage : null;
   }
@@ -103,7 +133,7 @@
   };
 
   /// Perform an HTTP request. Returns a Promise resolving to raw text.
-  NeteaseClient.prototype.perform = function (url, form) {
+  NeteaseClient.prototype.perform = function (url, form, upstreamHost) {
     var self = this;
     var body = encodeForm(form);
     var headers = {
@@ -112,6 +142,8 @@
       'Content-Type': 'application/x-www-form-urlencoded',
       'Cookie': this.cookieHeader({ os: 'pc', appver: '3.1.17' }),
     };
+    // 走本地代理时，告诉代理上游是谁（代理只绑 127.0.0.1，是开发工具）
+    if (relayBase() && upstreamHost) headers['X-Kumone-Upstream'] = upstreamHost;
 
     // Android / Capacitor path: native HTTP bridge bypasses CORS.
     if (typeof window !== 'undefined' && window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) {
@@ -134,14 +166,30 @@
             return (res && typeof res.data === 'string') ? res.data : String((res && res.data) || '');
           });
       }
+      // 没有 CapacitorHttp 的 JS 封装时（这个项目就是），**fetch 才是主力**：
+      // Capacitor 7 的原生桥在开启 `plugins.CapacitorHttp.enabled` 之后会
+      // 把 window.fetch 换成原生实现 —— 于是下面这个 fetch 走的是原生 HTTP，
+      // `Cookie` 请求头会被原样送到网易云（浏览器里那个头是会被丢掉的）。
     }
 
     // Plain browser path (used for local testing / PWA).
+    //
+    // 两个要点：
+    //   1. `credentials: 'include'` —— 否则跨源请求既不存也不发网易云下发的
+    //      MUSIC_U，登录态带不过去（实测浏览器路径必须靠它 + 浏览器 cookie 罐）。
+    //   2. 超时用 AbortController 手搓：`AbortSignal.timeout()` 在被原生桥
+    //      接管 fetch 时不生效，会让请求永远挂着。
+    var controller = typeof AbortController === 'function' ? new AbortController() : null;
+    var timer = null;
+    if (controller) {
+      timer = setTimeout(function () { try { controller.abort(); } catch (_e) {} }, 15000);
+    }
     return fetch(url, {
       method: 'POST',
       headers: headers,
       body: body,
-      signal: AbortSignal.timeout(15000),
+      credentials: 'include',
+      signal: controller ? controller.signal : undefined,
     }).then(function (res) {
       self.absorbSetCookies(res);
       if (!res.ok) {
@@ -150,6 +198,8 @@
         throw e;
       }
       return res.text();
+    }).finally(function () {
+      if (timer) clearTimeout(timer);
     });
   };
 
@@ -160,7 +210,7 @@
     var fullPath = path;
     var csrf = this.cookies['__csrf'];
     if (csrf) fullPath += (fullPath.indexOf('?') !== -1 ? '&' : '?') + 'csrf_token=' + csrf;
-    return this.perform('https://music.163.com/weapi' + fullPath, form);
+    return this.perform(endpoint('music.163.com', '/weapi', fullPath), form, 'music.163.com');
   };
 
   NeteaseClient.prototype.eapi = function (path, payload) {
@@ -181,7 +231,7 @@
     if (this.cookies['MUSIC_U']) header['MUSIC_U'] = this.cookies['MUSIC_U'];
     if (this.cookies['__csrf']) header['__csrf'] = this.cookies['__csrf'];
     var form = ncrypto.eapi(apiPath, JSON.stringify(Object.assign({}, payload, { header: header })));
-    return this.perform('https://interface.music.163.com/eapi' + path, form);
+    return this.perform(endpoint('interface.music.163.com', '/eapi', path), form, 'interface.music.163.com');
   };
 
   /// Decode a raw response string into JSON, surfacing business errors.

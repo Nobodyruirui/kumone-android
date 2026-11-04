@@ -66,6 +66,9 @@ function fakeService(loggedIn) {
       return Promise.resolve({ ok: true, data: ACCOUNT });
     },
     myPlaylists: function () { return Promise.resolve({ ok: true, data: [PLAYLIST] }); },
+    createdPlaylists: function () { return Promise.resolve({ ok: true, data: [PLAYLIST] }); },
+    favoritePlaylists: function () { return Promise.resolve({ ok: true, data: [] }); },
+    favoriteAlbums: function () { return Promise.resolve({ ok: true, data: [] }); },
     likedSongs: function () { return Promise.resolve({ ok: true, data: [] }); },
     likedAlbums: function () { return Promise.resolve({ ok: true, data: [] }); },
     cloudSongs: function () { return Promise.resolve({ ok: true, data: [] }); },
@@ -88,12 +91,12 @@ async function run() {
     M.actions.refreshAccount();
     await wait(400);
 
-    /* ------------------------------- 1. 底部导航只有三键 */
+    /* ------------------------------- 1. 底部导航四键（收藏升为一级功能） */
 
     var tabs = doc.querySelectorAll('#m-nav .m-tab');
-    ok('底部导航是三键', tabs.length === 3, '实际 ' + tabs.length);
+    ok('底部导航是四键', tabs.length === 4, '实际 ' + tabs.length);
     var labels = Array.prototype.map.call(tabs, function (b) { return b.getAttribute('aria-label'); });
-    ok('三键是 主页/广播/搜索', labels.join(',') === '主页,广播,搜索', labels.join(','));
+    ok('四键是 主页/广播/搜索/收藏', labels.join(',') === '主页,广播,搜索,收藏', labels.join(','));
     ok('一级菜单里没有「资料库」', labels.indexOf('资料库') < 0, labels.join(','));
 
     /* ------------------------------- 2. 左上角常驻「我的」入口 */
@@ -102,16 +105,17 @@ async function run() {
     ok('顶栏左上角有「我的」入口', !!chip);
     ok('根页面上它可见', chip && chip.classList.contains('visible'),
       chip ? chip.className : '（无）');
-    ok('快照里能拿到它的 ref', !!findRef(M.snapshot().tree, 'button', '我的歌单与收藏'));
+    ok('快照里能拿到它的 ref', !!findRef(M.snapshot().tree, 'button', '我的'));
 
-    // 位置：必须贴着屏幕左边缘。
-    // 早先那个**看不见**的返回箭头还占着位置（visibility:hidden），
-    // 把按钮顶到了离边缘约 52px —— 用户说「位置不符合人类审美」。
+    // 位置：左槽里「返回箭头」在最左，「我的」在它右边，位置固定。
+    // 「我的」的按钮位置**不随页面变**（根页与二级页同一个 x）——
+    // 入口不能时有时无，也不能忽左忽右。
     var backEl = doc.getElementById('m-back');
-    ok('看不见的返回箭头不占位', backEl && W.getComputedStyle(backEl).display === 'none',
+    ok('根页面上看不见返回箭头', backEl && W.getComputedStyle(backEl).display === 'none',
        backEl ? W.getComputedStyle(backEl).display : '（无）');
     var left = chip ? chip.getBoundingClientRect().left : -1;
-    ok('「我的」按钮贴着左边缘（离左边 < 20px）', left >= 0 && left < 20, 'left=' + left);
+    ok('「我的」按钮在左槽里、返回箭头右侧', left >= 20 && left < 90, 'left=' + left);
+    var rootLeft = left;
 
     /* ------------------------------- 3. 点它 → 「我的」抽屉 */
 
@@ -119,30 +123,36 @@ async function run() {
     await wait(500);
     ok('「我的」抽屉开了', doc.querySelectorAll('.m-sheet').length === 1,
       '抽屉数 ' + doc.querySelectorAll('.m-sheet').length);
-    ok('抽屉里有「我的歌单」', !!doc.querySelector('.m-sheet [aria-label="我的歌单"]'));
-    ok('抽屉里有「收藏的专辑」', !!doc.querySelector('.m-sheet [aria-label="收藏的专辑"]'));
+    ok('抽屉里有「我创建的歌单」', !!doc.querySelector('.m-sheet [aria-label="我创建的歌单"]'));
+    ok('抽屉里**没有**「收藏的专辑」（它是一级功能了）',
+      !doc.querySelector('.m-sheet [aria-label="收藏的专辑"]'));
     ok('抽屉里有「退出登录」', !!doc.querySelector('.m-sheet [aria-label="退出登录"]'));
 
-    /* ------------------------------- 4. 抽屉里点「我的歌单」 */
+    /* ------------------------------- 4. 抽屉里点「我创建的歌单」 */
 
-    var mineRef = findRef(M.snapshot().tree, 'button', '我的歌单');
-    ok('抽屉里的「我的歌单」有 ref', !!mineRef);
+    var mineRef = findRef(M.snapshot().tree, 'button', '我创建的歌单');
+    ok('抽屉里的「我创建的歌单」有 ref', !!mineRef);
     if (mineRef) {
       M.act(mineRef, 'click');
       await wait(600);
-      ok('进到我的歌单视图', M.state.view.type === 'myplaylists', M.state.view.type);
+      ok('进到我创建的歌单视图', M.state.view.type === 'myplaylists', M.state.view.type);
       ok('抽屉收起了', doc.querySelectorAll('.m-sheet').length === 0,
         '抽屉数 ' + doc.querySelectorAll('.m-sheet').length);
     }
 
-    /* ------------------------------- 5. 二级页：左上角让位给返回箭头 */
+    /* ------------------------------- 5. 二级页：返回箭头出现，「我的」仍在原位 */
 
     var chip2 = doc.getElementById('m-mine');
     var back = doc.getElementById('m-back');
-    ok('二级页上「我的」入口让位', chip2 && !chip2.classList.contains('visible'),
+    ok('二级页上「我的」入口**不让位**（常驻）', chip2 && chip2.classList.contains('visible'),
       chip2 ? chip2.className : '（无）');
     ok('二级页上返回箭头出现', back && back.classList.contains('visible'),
       back ? back.className : '（无）');
+    var left2 = chip2 ? chip2.getBoundingClientRect().left : -1;
+    ok('「我的」按钮位置没变（不跳动）', Math.abs(left2 - rootLeft) < 1,
+      'root=' + rootLeft + ' sub=' + left2);
+    var backLeft = back ? back.getBoundingClientRect().left : -1;
+    ok('返回箭头在「我的」左边', backLeft < left2, 'back=' + backLeft + ' mine=' + left2);
 
     /* ------------------------------- 6. 回来以后入口还在（常驻） */
 

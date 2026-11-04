@@ -11,7 +11,8 @@
 
   // Channel -> API call mapping (mirrors main.js CHANNELS).
   var dispatch = {
-    cellphoneLogin: function (a) { return API.cellphoneLogin(a.phone, a.password); },
+    // **没有密码登录通道**：本 App 只保留扫码登录
+    // （2026-11-04 决定，见 docs/adr/0005-只保留扫码登录.md）。
     qrKey: function () { return API.qrKey(); },
     qrCheck: function (a) { return API.qrCheck(a.key); },
     logout: function () { return API.logout(); },

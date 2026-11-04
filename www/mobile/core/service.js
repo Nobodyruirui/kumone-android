@@ -196,54 +196,14 @@
 
     /* --------------------------------------------------------- 扫码登录 */
     /**
-     * 手机号 + 密码登录。
+     * **本 App 只有扫码登录这一条路**（2026-11-04 决定，见 ADR-0005）。
+     * 密码通道整条移除：界面没有输入框，服务层没有 `loginByPassword`，
+     * 内核门面也没有 `cellphoneLogin` / `emailLogin` 通道。
      *
-     * 密码**只在这一次请求里出现**：不写 localStorage、不写日志、不进错误消息。
-     * 编码方式（明文 / MD5）由内核自己试，界面层不需要知道。
-     *
-     * @param {string} phone 手机号
-     * @param {string} password 密码
-     * @returns {Promise<object>} { ok:true, data:{loggedIn:true} } 或契约错误
+     * 理由：网易云只剩 `/login/cellphone` 一条密码通道（邮箱端点已 404），
+     * 而密码登录会反复踩风控（服务端回 `509 密码错误超过限制`），
+     * 一次输错就可能把账号锁一阵子；扫码根本不需要把密码交给本 App。
      */
-    async function loginByPassword(phone, password) {
-      var p = String(phone == null ? '' : phone).trim();
-      var pw = String(password == null ? '' : password);
-      if (!p) {
-        return err.make('KUMONE_LOGIN_FAILED', {
-          expected: 'await loginByPassword(phone, password)',
-          state: '手机号是空的',
-          cause: '没有填手机号',
-          next: '填手机号与密码后再试'
-        });
-      }
-      if (!pw) {
-        return err.make('KUMONE_LOGIN_FAILED', {
-          expected: 'await loginByPassword(phone, password)',
-          state: '密码是空的',
-          cause: '没有填密码',
-          next: '填手机号与密码后再试'
-        });
-      }
-
-      var r = await call('cellphoneLogin', { phone: p, password: pw });
-      if (!r.ok) return r;
-
-      var body = r.data || {};
-      if (Number(body.code) === 200) {
-        return { ok: true, data: { loggedIn: true } };
-      }
-
-      // 502 = 账号或密码不对；其它码按服务端给的说法透出
-      var msg = body.message || body.msg || '账号或密码错误';
-      return err.make('KUMONE_LOGIN_FAILED', {
-        expected: 'await loginByPassword(phone, password)',
-        state: '网易云返回 code=' + (body.code == null ? '未知' : body.code),
-        cause: msg,
-        next: Number(body.code) === 502
-          ? '核对手机号与密码后重试'
-          : '按上面的提示处理；必要时改用扫码登录'
-      });
-    }
 
     /** 取二维码的 unikey（有效期约 3 分钟）。 */
     async function qrKey() {
@@ -302,11 +262,36 @@
 
     /* ------------------------------------------------------- 资料库 */
 
-    /** 我的歌单。 */
+    /** 我的歌单（原始数据：**我创建的 + 我收藏的**混在一起）。 */
     async function myPlaylists(uid) {
       var r = await call('userPlaylists', { uid: uid });
       if (!r.ok) return r;
       return { ok: true, data: nz.normalizePlaylists(r.data) };
+    }
+
+    /**
+     * **我创建的歌单**（网易云 `/user/playlist` 把我创建的和��收藏的一起给，
+     * 靠 `subscribed` 字段区分 —— 归一化层把它保留下来了，这里按它分）。
+     *
+     * 为什么要分：界面上「我创建的歌单」和「收藏的歌单」是**两件事**，
+     * 混在一页里用户分不清哪些是自己建的、哪些是收藏的。
+     */
+    async function createdPlaylists(uid) {
+      var r = await myPlaylists(uid);
+      if (!r.ok) return r;
+      return { ok: true, data: (r.data || []).filter(function (pl) { return !pl.subscribed; }) };
+    }
+
+    /** **收藏的歌单**（我订阅的别人的歌单）。 */
+    async function favoritePlaylists(uid) {
+      var r = await myPlaylists(uid);
+      if (!r.ok) return r;
+      return { ok: true, data: (r.data || []).filter(function (pl) { return !!pl.subscribed; }) };
+    }
+
+    /** **收藏的专辑**（网易云的「我喜欢的专辑」）。 */
+    async function favoriteAlbums() {
+      return likedAlbums();
     }
 
     /** 喜欢的音乐（先取 id，再批量取详情）。 */
@@ -547,7 +532,6 @@
       isLoggedIn: isLoggedIn,
       account: account,
       logout: logout,
-      loginByPassword: loginByPassword,
       createPlaylist: createPlaylist,
       addToPlaylist: addToPlaylist,
       subscribeAlbum: subscribeAlbum,
@@ -561,6 +545,9 @@
       topArtists: topArtists,
       newAlbums: newAlbums,
       myPlaylists: myPlaylists,
+      createdPlaylists: createdPlaylists,
+      favoritePlaylists: favoritePlaylists,
+      favoriteAlbums: favoriteAlbums,
       likedSongs: likedSongs,
       cloudSongs: cloudSongs,
       playRecords: playRecords,

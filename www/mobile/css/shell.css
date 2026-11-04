@@ -82,6 +82,20 @@ img { -webkit-user-drag: none; }
 }
 #m-view-prev.is-active { visibility: visible; }
 
+/* 左滑返回时的「压暗层」：盖在上一页上面，随拖动进度变淡。
+   z-index 与 #m-view-prev 同为 0，但排在它后面 → 同层里画在上面；
+   #m-view 是 z-index 1，所以拖动中的当前页始终压在暗层之上。 */
+#m-slide-dim {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: #000;
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+}
+#m-slide-dim.is-active { visibility: visible; }
+
 /* 页面缓存容器：离开的页面停在这里，等待被还原。
    保持 connected（不 display:none）—— 这样在途的请求还能回填、
    图片还能继续加载，回来时是「已经加载好的那一页」。 */
@@ -115,20 +129,23 @@ img { -webkit-user-drag: none; }
   border-bottom: 1px solid var(--line);
 }
 
-/* 顶栏左槽：固定宽度，返回箭头与「我的」图标叠在里面二选一。
-   固定宽度是为了标题的居中不随页面跳动；两个按钮叠放是为了
-   「我的」贴着屏幕左边缘（早先看不见的返回箭头还占着位置，
-   把按钮顶到了离边缘半厘米的地方，看着别扭）。 */
+/* 顶栏左槽：返回箭头与「我的」**并排**，两个都在。
+   「我的」的位置固定在槽位的右边（不随有没有历史而移动），
+   返回箭头出现在它左边 —— 于是「我的」在任何页面都够得着。
+   早先是「二选一」：进了二级页左槽变成返回箭头，「我的」就没了 ——
+   用户报过「找不到歌单和收藏在哪」，入口不能时有时无。
+   标题是相对**屏幕**居中的（见 #m-title），所以槽位加宽不会把标题推歪。 */
 #m-left {
   position: relative;
-  flex: 0 0 32px;
-  width: 32px;
+  flex: 0 0 70px;
+  width: 70px;
   height: 32px;
 }
 
 #m-back {
   position: absolute;
-  inset: 0;
+  left: 0;
+  top: 0;
   display: none;
   width: 32px;
   height: 32px;
@@ -146,10 +163,11 @@ img { -webkit-user-drag: none; }
 #m-back svg { width: 18px; height: 18px; }
 
 /* 左上角常驻的「我的」：一个小圆按钮（列表图标）。
-   跟返回箭头共用一个槽位：根页面显示它，有历史时让位给返回箭头。 */
+   跟返回箭头并排在同一个槽位里，位置固定。 */
 #m-mine {
   position: absolute;
-  inset: 0;
+  right: 0;
+  top: 0;
   display: none;
   align-items: center;
   justify-content: center;
@@ -901,32 +919,8 @@ body.m-np #m-main { padding-bottom: 24px; }
 
 /* -------------------------------------------------------- 登录视图 */
 
-/* 登录方式 Tab（账号登录 / 扫码登录） */
-.m-tabs {
-  display: flex;
-  gap: 4px;
-  margin: 14px 0 16px;
-  border-bottom: 1px solid var(--line);
-}
-.m-tab-btn {
-  appearance: none;
-  -webkit-appearance: none;
-  border: 0;
-  background: none;
-  padding: 9px 2px;
-  margin-right: 16px;
-  font-family: inherit;
-  font-size: var(--fs-sub);
-  color: var(--ink-2);
-  cursor: pointer;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-}
-.m-tab-btn.is-active {
-  color: var(--ink);
-  font-weight: var(--fw-title);
-  border-bottom-color: var(--line-strong);
-}
+/* 登录方式 Tab 样式随账号密码登录一起移除了（只保留扫码），
+   表单样式还留着：搜索框、新建歌单输入框等仍在用。 */
 
 /* 表单 */
 .m-field {

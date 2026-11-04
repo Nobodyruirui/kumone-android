@@ -1,11 +1,15 @@
 /* =============================================================
- * 资料库：分段入口（播放列表 / 喜欢的音乐 / 云盘 / 最近播放 / 听歌排行）
+ * 我的：抽屉与页面共用的入口集合
  * -------------------------------------------------------------
- * 资料库是「我的内容」入口，也是账号区所在。
+ * 「我的」是**我自己账号下的东西**：我创建的歌单 / 喜欢的音乐 / 云盘 /
+ * 最近播放 / 听歌排行。
+ *
+ * 「收藏的歌单」「收藏的专辑」**不在这里** —— 它们是「我收藏的别人的东西」，
+ * 已经升成一级功能（底部导航第四键「收藏」，见 views/favorites.js）。
  *
  * 三条纪律：
- *   1. **未登录时点资料库直接拉起扫码**，而不是渲染一个点不动的入口列表
- *      —— 靠视图的 guard 钩子实现（见 core/router.js 的 goTab）。
+ *   1. **入口不被登录闸住**：未登录时抽屉照常打开，各条目写「登录后查看」，
+ *      只有真的去取数的那一步才需要账号（用户要求：功能独立于登录流程）。
  *   2. **角色色不新增**：我的=黄、云盘=灰、最近播放=蓝、听歌排行=橙。
  *      一个颜色只承载一种含义，不要为了「整页统一」把五个点涂成同一个黄。
  *   3. **每个入口都要有摘要**：数据就绪后显示计数，让模型和人都能一眼看到里面有什么。
@@ -15,11 +19,10 @@
 
   var ui = M.ui;
 
-  // 入口顺序 = 用户最可能找的东西排在前面：
-  // 「我的歌单」和「收藏的专辑」是用户报过「找不到」的两个，先摆出来。
+  // 入口顺序 = 用户最可能找的东西排在前面。
+  // 「收藏」已经独立成一级功能，这里只留「我的账号下的东西」。
   var ENTRIES = [
-    { key: 'playlists', label: '我的歌单', role: 'owned', view: 'myplaylists' },
-    { key: 'favalbums', label: '收藏的专辑', role: 'owned', view: 'favalbums' },
+    { key: 'playlists', label: '我创建的歌单', role: 'owned', view: 'myplaylists' },
     { key: 'liked', label: '喜欢的音乐', role: 'owned', view: 'liked' },
     { key: 'cloud', label: '云盘', role: 'neutral', view: 'cloud' },
     { key: 'recent', label: '最近播放', role: 'auto', view: 'recent' },
@@ -34,7 +37,7 @@
   async function summaryOf(entry, uid) {
     try {
       if (entry.key === 'playlists') {
-        var r = await M.service.myPlaylists(uid);
+        var r = await M.service.createdPlaylists(uid);
         if (!r.ok) return { text: r.title || '加载失败', err: r };
         var n = (r.data || []).length;
         return { text: n ? n + ' 个歌单' : '还没有歌单' };
@@ -44,12 +47,6 @@
         if (!l.ok) return { text: l.title || '加载失败', err: l };
         var ln = (l.data || []).length;
         return { text: ln ? ln + ' 首红心' : '还没有红心' };
-      }
-      if (entry.key === 'favalbums') {
-        var f = await M.service.likedAlbums();
-        if (!f.ok) return { text: f.title || '加载失败', err: f };
-        var fn = (f.data || []).length;
-        return { text: fn ? fn + ' 张专辑' : '还没有收藏专辑' };
       }
       if (entry.key === 'cloud') {
         var c = await M.service.cloudSongs();
@@ -143,14 +140,32 @@
       list.appendChild(li2);
     }
 
-    // 计数异步补上；取不到就写「加载失败」，不假装有数据
-    Promise.resolve(M.service.account()).then(function (acc) {
-      var uid = (acc && acc.ok && acc.data) ? acc.data.userId : 0;
-      rows.forEach(function (r) {
-        summaryOf(r.entry, uid).then(function (s) {
+    // 计数异步补上；取不到就写「加载失败」，不假装有数据。
+    //
+    // 未登录时**不发那些注定失败的请求**：除了「最近播放」（本机历史，
+    // 不需要账号），其余入口一律写「登录后查看」。
+    Promise.resolve(M.service.isLoggedIn()).then(function (loggedIn) {
+      if (!loggedIn) {
+        rows.forEach(function (r) {
           if (!r.sub.isConnected) return;
-          r.sub.textContent = s.text;
-          if (s.err) r.sub.setAttribute('data-code', s.err.code || '');
+          if (r.entry.key === 'recent') {
+            summaryOf(r.entry, 0).then(function (s) {
+              if (r.sub.isConnected) r.sub.textContent = s.text;
+            });
+            return;
+          }
+          r.sub.textContent = '登录后查看';
+        });
+        return;
+      }
+      return Promise.resolve(M.service.account()).then(function (acc) {
+        var uid = (acc && acc.ok && acc.data) ? acc.data.userId : 0;
+        rows.forEach(function (r) {
+          summaryOf(r.entry, uid).then(function (s) {
+            if (!r.sub.isConnected) return;
+            r.sub.textContent = s.text;
+            if (s.err) r.sub.setAttribute('data-code', s.err.code || '');
+          });
         });
       });
     });
@@ -163,18 +178,9 @@
     // 离开后停放：返回时不用重新拉一遍摘要（没有订阅与轮询，放着安全）。
     cacheable: true,
 
-    /**
-     * 进入前的闸：未登录就直接拉起扫码登录。
-     * 返回 false 表示「这个视图不渲染，我已经把你带到登录页了」。
-     */
-    guard: function () {
-      return Promise.resolve(M.service.isLoggedIn()).then(function (loggedIn) {
-        if (loggedIn) return true;
-        M.actions.toLogin({ view: 'library' });
-        return false;
-      });
-    },
-
+    // **没有 guard**：未登录也照常打开这个页面。
+    // 早先这里是「未登录直接拉起扫码」—— 用户要求功能独立于登录流程，
+    // 入口不能被登录态挡住；真正取数的那一步才需要账号。
     render: function () {
       var frag = document.createDocumentFragment();
       frag.appendChild(ui.el('h1', { class: 'm-display' }, '我的'));

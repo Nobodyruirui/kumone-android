@@ -108,36 +108,36 @@ check('登录中断：带恢复信息（哪个请求被打断）',
   JSON.stringify(r.resume));
 check('登录中断：kind 为 permanent（不能原地重试）', r.kind === 'permanent');
 
-/* ------------------------------------------ 4. 账号密码登录 */
+/* ------------------------------------------ 4. 登录只剩扫码这一条路 */
 
-const loginFacade = fakeFacade({
-  cellphoneLogin: (a) => {
-    if (a.phone === '138-0000-0000' && a.password === 'good-pass') {
-      return { ok: true, data: { code: 200, cookie: 'MUSIC_U=x' } };
-    }
-    return { ok: true, data: { code: 502, message: '账号或密码错误' } };
-  }
+/*
+  账号密码登录已整条移除（2026-11-04，docs/adr/0005-只保留扫码登录.md）：
+  服务层**没有** loginByPassword，内核门面**没有** cellphoneLogin / emailLogin。
+  这里断言「它们确实不在了」—— 免得以后谁顺手又加回来。
+*/
+check('服务层没有 loginByPassword（密码登录已移除）',
+  typeof svc.loginByPassword !== 'function');
+check('服务层没有 openUrl / copyText（是密码风控引导的配套，一并移除）',
+  typeof svc.openUrl !== 'function' && typeof svc.copyText !== 'function');
+
+const qrFacade = fakeFacade({
+  qrKey: { ok: true, data: 'unikey-1' },
+  qrImage: { ok: true, data: 'data:image/gif;base64,R0lGOD' },
+  qrCheck: { ok: true, data: { code: 801, message: '等待扫码' } }
 });
-svc = createService({ facade: loginFacade });
+svc = createService({ facade: qrFacade });
 
-r = await svc.loginByPassword('138-0000-0000', 'good-pass');
-check('账号登录：成功返回 loggedIn', r.ok === true && r.data.loggedIn === true, JSON.stringify(r));
-check('账号登录：确实调了 cellphoneLogin 通道',
-  loginFacade.calls.some((c) => c.channel === 'cellphoneLogin'));
-
-r = await svc.loginByPassword('138-0000-0000', 'bad-pass');
-check('账号登录：凭据不对 → KUMONE_LOGIN_FAILED', !r.ok && r.code === 'KUMONE_LOGIN_FAILED');
-check('账号登录：凭据不对是 permanent（不该原地重试）', r.kind === 'permanent');
-check('账号登录：消息含五要素',
-  /Expected:/.test(r.message) && /State:/.test(r.message) && /Next:/.test(r.message), r.message);
-check('账号登录：失败原因里透出服务端说法', /账号或密码错误/.test(r.cause || ''), r.cause);
-
-r = await svc.loginByPassword('', 'x');
-check('账号登录：手机号为空 → KUMONE_LOGIN_FAILED', !r.ok && r.code === 'KUMONE_LOGIN_FAILED');
-r = await svc.loginByPassword('138-0000-0000', '');
-check('账号登录：密码为空 → KUMONE_LOGIN_FAILED', !r.ok && r.code === 'KUMONE_LOGIN_FAILED');
-check('账号登录：空值时根本没调内核',
-  !loginFacade.calls.some((c) => c.channel === 'cellphoneLogin' && !c.args.phone));
+r = await svc.qrKey();
+check('扫码：取 unikey 走内核门面', r.ok === true && r.data === 'unikey-1', JSON.stringify(r));
+r = await svc.qrCheck('unikey-1');
+check('扫码：查询状态走内核门面', r.ok === true && r.data.code === 801, JSON.stringify(r));
+r = await svc.qrImage('https://music.163.com/login?codekey=unikey-1');
+check('扫码：渲染二维码走内核门面', r.ok === true, JSON.stringify(r));
+check('扫码：内核门面的通道名对',
+  qrFacade.calls.some((c) => c.channel === 'qrKey') &&
+  qrFacade.calls.some((c) => c.channel === 'qrCheck') &&
+  qrFacade.calls.some((c) => c.channel === 'qrImage'),
+  JSON.stringify(qrFacade.calls.map((c) => c.channel)));
 
 /* ------------------------------------------ 4b. 歌单 / 榜单详情取歌 */
 

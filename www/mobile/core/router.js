@@ -35,6 +35,13 @@
    */
   var keepAlive = new Map();
 
+  /**
+   * 手势期间「上一层」容器里那一块的缓存键。
+   * 提交返回时要把这条缓存条目删掉（它的内容已经被搬回当前页了）。
+   */
+  var slidePrevKey = '';
+
+
   /** 视图实例的键：同一个页面重复进要命中同一条缓存。 */
   function viewKey(view) {
     if (!view) return '';
@@ -146,6 +153,29 @@
   }
 
   /**
+   * 压暗层：盖在**上一页**上面。
+   *
+   * 左滑返回时，上一页是在下面「等着」的。给它压一层暗，
+   * 拖动越深这层越淡 —— 底下那页是「被揭开来」的，而不是「并排摆着」。
+   *
+   * 层级：z-index 0 且排在 #m-view-prev 之后（同层靠后 → 画在上面），
+   * 而 #m-view 是 z-index 1 → 拖动中的当前页始终压在暗层上面。
+   */
+  var DIM_MAX = 0.18;
+
+  function dimLayer() {
+    var d = document.getElementById('m-slide-dim');
+    if (d) return d;
+    var main = document.getElementById('m-main');
+    if (!main) return null;
+    d = document.createElement('div');
+    d.id = 'm-slide-dim';
+    d.setAttribute('aria-hidden', 'true');
+    main.appendChild(d);
+    return d;
+  }
+
+  /**
    * 「下一帧」—— 但**不只靠 requestAnimationFrame**。
    *
    * 为什么：rAF 在 WebView 被节流（切后台、无头环境、某些省电模式）时**不触发**，
@@ -222,10 +252,11 @@
     // 方向：前进从右边进、返回从左边进。
     // 位移要**够大**才读得出「换页」：26px 的微移看着像「啪」一下跳变，很突兀。
     // 旧页面同时往反方向**视差**挪一点 —— 两层错开，才有「一层压在另一层上」的感觉。
+    // 幅度别太大：40% 以上的位移读起来像「甩」出去，不是「翻」过去。
     var enterFrom = '0px';
     var exitTo = '0px';
-    if (direction === 'forward') { enterFrom = '38%'; exitTo = '-14%'; }
-    else if (direction === 'back') { enterFrom = '-38%'; exitTo = '14%'; }
+    if (direction === 'forward') { enterFrom = '32%'; exitTo = '-16%'; }
+    else if (direction === 'back') { enterFrom = '-32%'; exitTo = '18%'; }
 
     // 初始状态（不带过渡），随后由 requestAnimationFrame 启动动画
     root.style.transition = 'none';
@@ -443,16 +474,21 @@
     transition(direction, build, opts, cached);
   };
 
-  /** 手势层用：把当前内容整体推到右边（拖到头时的收尾）。 */
+  /**
+   * 手势层用：把当前内容整体推到右边（拖到头时的收尾）。
+   *
+   * 已被 slideCommitBack 取代（那版把「推走」和「上一页归位」放在同一段时间里，
+   * 没有中间空档）。留着是为了不打断老调用方。
+   */
   M.slideOutRight = function (done) {
     var root = document.getElementById('m-view');
     if (!root) { if (done) done(); return; }
     root.style.willChange = 'transform';
-    root.style.transition = 'transform .22s cubic-bezier(.32,.72,0,1)';
+    root.style.transition = 'transform .28s cubic-bezier(.32,.72,0,1)';
     root.style.transform = 'translate3d(' + (window.innerWidth || 390) + 'px,0,0)';
     // 不淡出：整页淡出时白卡片会变成半透明的白块在灰底上飘
     root.style.opacity = '1';
-    setTimeout(function () { if (done) done(); }, 210);
+    setTimeout(function () { if (done) done(); }, 280);
   };
 
   /** 手势层用：把内容弹回原位（滑得不够）。 */
@@ -460,25 +496,25 @@
     var root = document.getElementById('m-view');
     if (!root) return;
     root.style.willChange = 'transform';
-    root.style.transition = 'transform .22s cubic-bezier(.32,.72,0,1)';
+    root.style.transition = 'transform .26s cubic-bezier(.22,.61,.36,1)';
     root.style.transform = 'translate3d(0,0,0)';
     root.style.opacity = '1';
-    // 底下那一页的视差也弹回去
-    var prev = document.getElementById('m-view-prev');
-    if (prev && prev.classList.contains('is-active')) {
-      prev.style.transition = 'transform .22s cubic-bezier(.32,.72,0,1)';
-      prev.style.transform = 'translate3d(0,0,0)';
+    // 压暗层回到「上一页还没被揭��」的亮度
+    var dim = dimLayer();
+    if (dim) {
+      dim.style.transition = 'opacity .26s ease';
+      dim.style.opacity = String(DIM_MAX);
     }
     setTimeout(function () {
       root.style.transition = '';
       root.style.transform = '';
       root.style.opacity = '';
       root.style.willChange = '';
-      if (prev) {
-        prev.style.transition = '';
-        prev.style.transform = '';
+      if (dim) {
+        dim.style.transition = '';
+        dim.classList.remove('is-active');
       }
-    }, 240);
+    }, 280);
   };
 
   /**
@@ -487,20 +523,120 @@
    * **只跟位移，不跟透明度。**
    * 以前这里带一点透明度衰减（dx 越大越淡），于是整页的白卡片在灰底上
    * 变成一片半透明的「白色方块」—— 真机报「左滑出现白色方块」就是它。
+   *
+   * 底下那一页**不动**：它就在原地等着被揭开。
+   * 早先这里让上一页也往右挪 0.3*dx —— 两页一起往右平移，左边露出的是
+   * 画布底色（灰），松手后再让上一页从左边补进来，中间那一下空档
+   * 就是用户说的「突兀」。
    */
   M.slideFollow = function (dx) {
     var root = document.getElementById('m-view');
     if (!root) return;
+    var w = (typeof window !== 'undefined' && window.innerWidth) || 390;
+    var p = Math.max(0, Math.min(1, dx / w));
+
     root.style.willChange = 'transform';
     root.style.transition = 'none';
     root.style.transform = 'translate3d(' + dx + 'px,0,0)';
     root.style.opacity = '1';
-    // 底下那一页**慢一点**跟着挪（视差）：两层错开才像「一层滑开另一层」，
-    // 一起走就成了整块平移，没有层次感。
+
     var prev = document.getElementById('m-view-prev');
     if (prev && prev.classList.contains('is-active')) {
-      prev.style.transform = 'translate3d(' + (dx * 0.3) + 'px,0,0)';
+      prev.style.transform = 'translate3d(0,0,0)';
     }
+    // 揭得越深，底下那页越亮
+    var dim = dimLayer();
+    if (dim) {
+      dim.classList.add('is-active');
+      dim.style.transition = 'none';
+      dim.style.opacity = String(DIM_MAX * (1 - p));
+    }
+  };
+
+  /**
+   * 松手且判定为「返回」：**一次**把当前页推出去，上一页同时归位。
+   *
+   * 早先是两拍：先 0.22s 把当前页推走（那 0.22s 里屏幕上什么都没有），
+   * 再 0.3s 让上一页从左边进来。中间那一下「空档」就是「突兀」的来源。
+   * 现在两件事在同一段时间里发生：推走 + 归位 + 压暗层淡出。
+   */
+  M.slideCommitBack = function (done) {
+    var root = document.getElementById('m-view');
+    var prev = document.getElementById('m-view-prev');
+    var main = document.getElementById('m-main');
+    var w = (typeof window !== 'undefined' && window.innerWidth) || 390;
+    var dim = dimLayer();
+
+    if (!root || !prev) {
+      if (M.back) M.back({ direction: 'back' });
+      if (done) done();
+      return;
+    }
+
+    var from = M.state.view;
+    var parkKey = cacheable(from) ? viewKey(from) : '';
+
+    // 1) 当前页推出屏幕
+    root.style.willChange = 'transform';
+    root.style.transition = 'transform .28s cubic-bezier(.32,.72,0,1)';
+    root.style.transform = 'translate3d(' + w + 'px,0,0)';
+    root.style.opacity = '1';
+
+    // 2) 上一页归位 + 压暗层淡出（同一时刻开始）
+    prev.style.transition = 'transform .28s cubic-bezier(.32,.72,0,1), opacity .28s ease';
+    prev.style.transform = 'translate3d(0,0,0)';
+    if (dim) {
+      dim.style.transition = 'opacity .28s ease';
+      dim.style.opacity = '0';
+    }
+
+    setTimeout(function () {
+      // 3) 换内容：旧页停放进缓存，上一页搬回 #m-view
+      var leaving = [];
+      while (root.firstChild) {
+        var n = root.firstChild;
+        leaving.push(n);
+        root.removeChild(n);
+      }
+      if (parkKey) park(parkKey, leaving);
+
+      var holder = prev.firstElementChild;
+      while (prev.firstChild) prev.removeChild(prev.firstChild);
+      if (holder) {
+        while (holder.firstChild) root.appendChild(holder.firstChild);
+        if (holder.parentNode) holder.parentNode.removeChild(holder);
+      }
+      // 上一页的缓存条目已经被消耗掉：别让它留在表里变成一条指向空壳的记录
+      if (slidePrevKey) keepAlive.delete(slidePrevKey);
+      slidePrevKey = '';
+
+      prev.classList.remove('is-active');
+      prev.style.transition = '';
+      prev.style.transform = '';
+      prev.style.opacity = '';
+      prev.style.willChange = '';
+
+      // 4) 状态与外壳
+      leaveCurrent();
+      M.state.view = M.state.history.pop() || { type: 'home' };
+      if (M.shell) M.shell.sync(M.state.view, M.views[M.state.view.type]);
+
+      // 5) 复位当前页样式（它现在装的是上一页的内容）
+      root.style.transition = '';
+      root.style.transform = '';
+      root.style.opacity = '';
+      root.style.willChange = '';
+      root.style.background = '';
+      root.style.minHeight = '';
+      if (main) main.scrollTop = 0;
+
+      if (dim) {
+        dim.classList.remove('is-active');
+        dim.style.transition = '';
+        dim.style.opacity = '0';
+      }
+      if (done) done();
+    }, 290);
   };
 
   /**
@@ -520,6 +656,7 @@
     prev.textContent = '';
     // 整块搬过去（节点不搬家，还原时再搬回来）
     prev.appendChild(hit.holder);
+    slidePrevKey = key;
     prev.classList.add('is-active');
     prev.style.transition = 'none';
     prev.style.transform = 'translate3d(0,0,0)';
@@ -531,6 +668,13 @@
       root.style.background = 'var(--canvas)';
       root.style.minHeight = (main && main.clientHeight ? main.clientHeight : 0) + 'px';
     }
+    // 压暗层先备好：起手时上一页是「被盖住」的
+    var dim = dimLayer();
+    if (dim) {
+      dim.classList.add('is-active');
+      dim.style.transition = 'none';
+      dim.style.opacity = String(DIM_MAX);
+    }
     return true;
   };
 
@@ -541,6 +685,12 @@
     if (root) {
       root.style.background = '';
       root.style.minHeight = '';
+    }
+    var dim = dimLayer();
+    if (dim) {
+      dim.classList.remove('is-active');
+      dim.style.transition = '';
+      dim.style.opacity = '0';
     }
   };
 

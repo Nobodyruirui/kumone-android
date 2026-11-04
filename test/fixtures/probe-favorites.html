@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<title>Kumone 收藏（一级功能）自检</title>
+<style>
+  body { font: 13px/1.6 system-ui, sans-serif; margin: 20px; }
+  iframe { width: 390px; height: 760px; border: 1px solid #ddd; }
+  pre { background: #0a0a0a; color: #e8e8ea; padding: 12px; border-radius: 10px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<!--
+  自检探针：「收藏」升为一级功能（用户要求：独立于「登录 → 再进歌单收藏」那条流程）。
+
+  断言：
+    1. 底部导航第四键是「收藏」，能进收藏视图
+    2. 未登录：页面照常打开，两个分区各自给「登录后查看」+「去登录」，没人被踢去登录页
+    3. 未登录时**不发**那些注定失败的请求
+    4. 点「去登录」→ 进登录页
+    5. 已登录：两个分区都列出内容，且只列「收藏的」（subscribed=true）歌单
+-->
+<iframe id="app" src="/www/index.html"></iframe>
+<pre id="result" data-result="PENDING">PENDING</pre>
+
+<script>
+var out = document.getElementById('result');
+var failures = [];
+function ok(name, cond, extra) {
+  if (!cond) failures.push(name + (extra ? ' :: ' + extra : ''));
+}
+function finish() {
+  var okAll = failures.length === 0;
+  out.setAttribute('data-result', okAll ? 'PASS' : 'FAIL');
+  out.textContent = (okAll ? 'PASS ' : 'FAIL ') +
+    (okAll ? '「收藏」一级功能自检通过' : ('失败项：' + failures.join('；')));
+}
+function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+var ACCOUNT = { userId: 77, nickname: '测试昵称', avatarUrl: '', vipType: 0 };
+var SUB_PLAYLIST = { id: 22, name: '收藏的歌单一', cover: '', creator: { nickname: '别人' }, subscribed: true };
+var OWN_PLAYLIST = { id: 23, name: '我创建的歌单', cover: '', creator: { nickname: '我' }, subscribed: false };
+var FAV_ALBUM = { id: 31, name: '收藏的专辑一', pic: '', artistName: '甲乐队' };
+
+var calls = [];
+
+function fakeService(loggedIn) {
+  return {
+    calls: calls,
+    isLoggedIn: function () { return Promise.resolve(!!loggedIn); },
+    account: function () {
+      if (!loggedIn) return Promise.resolve({ ok: false, code: 'KUMONE_NEED_LOGIN' });
+      return Promise.resolve({ ok: true, data: ACCOUNT });
+    },
+    // 原始数据：网易云把「我创建的」和「我收藏的」一起给
+    myPlaylists: function () {
+      calls.push('myPlaylists');
+      return Promise.resolve({ ok: true, data: [OWN_PLAYLIST, SUB_PLAYLIST] });
+    },
+    createdPlaylists: function () {
+      calls.push('createdPlaylists');
+      return Promise.resolve({ ok: true, data: [OWN_PLAYLIST] });
+    },
+    favoritePlaylists: function () {
+      calls.push('favoritePlaylists');
+      return Promise.resolve({ ok: true, data: [SUB_PLAYLIST] });
+    },
+    favoriteAlbums: function () {
+      calls.push('favoriteAlbums');
+      return Promise.resolve({ ok: true, data: [FAV_ALBUM] });
+    },
+    likedAlbums: function () { return Promise.resolve({ ok: true, data: [FAV_ALBUM] }); },
+    likedSongs: function () { return Promise.resolve({ ok: true, data: [] }); },
+    cloudSongs: function () { return Promise.resolve({ ok: true, data: [] }); },
+    playRecords: function () { return Promise.resolve({ ok: true, data: [] }); },
+    logout: function () { return Promise.resolve({ ok: true, data: true }); }
+  };
+}
+
+var frame = document.getElementById('app');
+frame.addEventListener('load', function () { setTimeout(run, 800); });
+
+async function run() {
+  try {
+    var W = frame.contentWindow;
+    var M = W.Mobile;
+    var doc = W.document;
+
+    /* ------------------------------- 1. 底部导航第四键 */
+
+    M.service = fakeService(false);
+    M.actions.refreshAccount();
+    await wait(400);
+
+    var tabs = doc.querySelectorAll('#m-nav .m-tab');
+    ok('底部导航是四键', tabs.length === 4, '实际 ' + tabs.length);
+    var favTab = doc.querySelector('#m-nav .m-tab[data-view="favorites"]');
+    ok('第四键是「收藏」', !!favTab);
+    ok('收藏键有语义名', favTab && favTab.getAttribute('aria-label') === '收藏',
+      favTab ? favTab.getAttribute('aria-label') : '（无）');
+
+    if (favTab) favTab.click();
+    await wait(700);
+    ok('点它进收藏视图', M.state.view.type === 'favorites', M.state.view.type);
+    ok('收藏键被点亮', favTab.getAttribute('aria-current') === 'page');
+
+    /* ------------------------------- 2. 未登录：页面照常打开 */
+
+    var text = doc.getElementById('m-view').textContent;
+    ok('页面有两个分区：收藏的歌单 + 收藏的专辑',
+      text.indexOf('收藏的歌单') >= 0 && text.indexOf('收藏的专辑') >= 0, text.slice(0, 140));
+    ok('没被踢去登录页', M.state.view.type === 'favorites', M.state.view.type);
+
+    var loginCards = doc.querySelectorAll('#m-view .m-login');
+    ok('两个分区各给一张登录引导', loginCards.length === 2, '卡片数 ' + loginCards.length);
+    var loginBtns = doc.querySelectorAll('#m-view .m-login button[aria-label="去登录"]');
+    ok('登录引导里有「去登录」按钮', loginBtns.length >= 2, '按钮数 ' + loginBtns.length);
+
+    /* ------------------------------- 3. 未登录时不发注定失败的请求 */
+
+    calls.length = 0;
+    M.goTab('favorites');
+    await wait(700);
+    ok('未登录时没去取收藏数据',
+      calls.indexOf('favoritePlaylists') < 0 && calls.indexOf('favoriteAlbums') < 0,
+      JSON.stringify(calls));
+
+    /* ------------------------------- 4. 点「去登录」→ 登录页 */
+
+    loginBtns[0].click();
+    await wait(700);
+    ok('点「去登录」进登录页', M.state.view.type === 'login', M.state.view.type);
+
+    /* ------------------------------- 5. 已登录：内容出来 */
+
+    M.service = fakeService(true);
+    M.actions.refreshAccount();
+    M.goTab('favorites');
+    await wait(900);
+
+    ok('已登录仍在收藏视图', M.state.view.type === 'favorites', M.state.view.type);
+    var tiles = doc.querySelectorAll('#m-view .m-tile');
+    ok('收藏的歌单与收藏的专辑都列出来了', tiles.length === 2, '卡片数 ' + tiles.length);
+    var names = Array.prototype.map.call(tiles, function (t) { return t.getAttribute('aria-label'); });
+    ok('列的是「收藏的歌单一」（不是「我创建的歌单」）',
+      names.join(',').indexOf('收藏的歌单一') >= 0, names.join(','));
+    ok('没有把「我创建的歌单」混进来',
+      names.join(',').indexOf('我创建的歌单') < 0, names.join(','));
+    ok('已登录时不再显示登录引导', doc.querySelectorAll('#m-view .m-login').length === 0);
+
+    finish();
+  } catch (e) {
+    failures.push('异常：' + (e && e.message ? e.message : String(e)));
+    finish();
+  }
+}
+</script>
+</body>
+</html>

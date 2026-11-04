@@ -28,10 +28,12 @@
 
   var LISTS = {
     myplaylists: {
-      title: '我的歌单',
+      title: '我创建的歌单',
       load: async function () {
         var uid = await currentUid();
-        var r = await M.service.myPlaylists(uid);
+        // 只取**我创建的**：网易云一个接口把两种都给了（靠 subscribed 区分），
+        // 「我收藏的」归一级功能「收藏」管。
+        var r = await M.service.createdPlaylists(uid);
         return r.ok ? { ok: true, data: r.data } : r;
       },
       // 头部动作：新建歌单（建好要把列表刷新一下）
@@ -60,9 +62,11 @@
     },
 
     favalbums: {
+      // 「收藏的专辑」升成了一级功能（底部导航「收藏」，见 views/favorites.js）。
+      // 这里保留这个视图类型只为兼容旧链接；新入口不再指向它。
       title: '收藏的专辑',
       load: async function () {
-        var r = await M.service.likedAlbums();
+        var r = await M.service.favoriteAlbums();
         return r.ok ? { ok: true, data: r.data } : r;
       },
       render: function (list) {

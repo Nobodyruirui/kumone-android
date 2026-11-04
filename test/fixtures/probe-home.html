@@ -175,7 +175,7 @@ async function run() {
 
     var loginCards = doc.querySelectorAll('#m-view .m-login');
     ok('每日推荐显示登录引导', loginCards.length >= 1, '登录引导数量 ' + loginCards.length);
-    // 登录页现在是「账号登录为主、扫码为备选」，所以引导按钮叫「去登录」
+    // 登录页只有扫码这一条路了（ADR-0005），所以引导按钮叫「去登录」
     ok('登录引导给的是「去登录」而不是「重试」',
       loginCards.length >= 1 && /去登录/.test(loginCards[0].textContent) &&
       !/重试/.test(loginCards[0].textContent),

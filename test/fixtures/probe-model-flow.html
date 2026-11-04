@@ -91,8 +91,8 @@ async function run() {
     ok('snapshot 返回 ok', snap.ok === true);
     ok('快照带视图标记', /view "/.test(snap.tree));
 
-    /* --- 2. 打开「我的」（顶栏左上角的一次性入口） --- */
-    var mineRef = findRef(snap.tree, 'button', '我的歌单与收藏');
+    /* --- 2. 打开「我的」（顶栏左上角的常驻入口） --- */
+    var mineRef = findRef(snap.tree, 'button', '我的');
     ok('快照里找得到「我的」入口', !!mineRef);
     if (!mineRef) { finish(); return; }
 
@@ -101,7 +101,7 @@ async function run() {
     await wait(500);
 
     var snap2 = M.snapshot();
-    ok('「我的」抽屉开了（里面有我的歌单）', /我的歌单/.test(snap2.tree), snap2.tree.slice(0, 200));
+    ok('「我的」抽屉开了（里面是我创建的歌单）', /我创建的歌单/.test(snap2.tree), snap2.tree.slice(0, 200));
 
     /* --- 3. 点喜欢的音乐 --- */
     var likedRef = findRef(snap2.tree, 'button', '喜欢的音乐');

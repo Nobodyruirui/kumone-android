@@ -124,8 +124,8 @@
     eapi: function (apiPath, jsonText) { return eapiImpl(apiPath, jsonText, util); },
     WEAPI_ENC_SEC_KEY: WEAPI_ENC_SEC_KEY,
     fallbackMD5: fallbackMD5,
-    // 账号登录要用：网易云的服务端对密码有两种认法（明文 / MD5），
-    // 内核自己试，不让界面层知道密码该怎么编码。
+    // MD5：内核内部要用（eapi 签名、解锁音源的 key 等）。
+    // 以前账号登录也用它 —— 那条路已经整条移除（ADR-0005）。
     md5hex: function (s) { return util.md5hex(String(s == null ? '' : s)); },
   };
 });

@@ -56,6 +56,9 @@ function fakeService(overrides) {
       return Promise.resolve({ ok: true, data: ACCOUNT });
     },
     myPlaylists: function () { return Promise.resolve({ ok: true, data: [PLAYLIST] }); },
+    createdPlaylists: function () { return Promise.resolve({ ok: true, data: [PLAYLIST] }); },
+    favoritePlaylists: function () { return Promise.resolve({ ok: true, data: [] }); },
+    favoriteAlbums: function () { return Promise.resolve({ ok: true, data: [] }); },
     likedSongs: function () { return Promise.resolve({ ok: true, data: [TRACK] }); },
     cloudSongs: function () { return Promise.resolve({ ok: true, data: [TRACK, TRACK] }); },
     playRecords: function () {
@@ -89,40 +92,50 @@ async function run() {
     var M = W.Mobile;
     var doc = W.document;
 
-    /* ------------------------------- 1. 未登录点资料库 → 直接拉起扫码 */
+    /* ------------------------------- 1. 未登录：页面照常打开（不被登录闸住） */
 
     M.service = fakeService({
       isLoggedIn: function () { return Promise.resolve(false); },
       account: function () { return Promise.resolve({ ok: false, code: 'KUMONE_NEED_LOGIN' }); }
     });
     M.goTab('library');
-    await wait(400);
+    await wait(600);
 
-    ok('未登录点资料库直接进扫码页', M.state.view.type === 'login', M.state.view.type);
-    ok('扫码页有二维码区域或状态文字',
-      doc.querySelectorAll('#m-view .m-login-status, #m-view .m-login-code').length > 0);
-    ok('没有渲染出点不动的入口列表',
-      doc.querySelectorAll('#m-view .m-list-row').length === 0,
+    ok('未登录也进得了「我的」（功能独立于登录流程）',
+      M.state.view.type === 'library', M.state.view.type);
+    ok('入口列表照常渲染',
+      doc.querySelectorAll('#m-view .m-list-row').length > 0,
       '入口行数 ' + doc.querySelectorAll('#m-view .m-list-row').length);
+    var subs0 = Array.prototype.map.call(doc.querySelectorAll('#m-view .m-list-row .m-track-sub'),
+      function (n) { return n.textContent; });
+    ok('未登录时摘要写「登录后查看」（而不是「加载失败」）',
+      subs0.filter(function (s) { return s === '登录后查看'; }).length >= 3,
+      JSON.stringify(subs0));
+    ok('未登录时没人被踢去登录页', M.state.view.type !== 'login', M.state.view.type);
 
     /* ------------------------------- 2. 已登录：五个入口 */
 
     M.service = fakeService();
     // 探针把假服务换上之后，顶栏账号区要重新读一次账号
     M.actions.refreshAccount();
+    // 先离开再回来：goTab 在当前已经是这一页时会直接返回（不重画）
+    M.goTab('home');
+    await wait(300);
     M.goTab('library');
     await wait(500);
 
     ok('已登录进资料库', M.state.view.type === 'library', M.state.view.type);
 
-    var NAMES = ['我的歌单', '收藏的专辑', '喜欢的音乐', '云盘', '最近播放', '听歌排行'];
+    var NAMES = ['我创建的歌单', '喜欢的音乐', '云盘', '最近播放', '听歌排行'];
     var snap = M.snapshot();
     NAMES.forEach(function (n) {
       ok('入口「' + n + '」带 ref', !!findRef(snap.tree, 'button', n));
     });
-    ok('六个入口 + 退出登录都在', doc.querySelectorAll('#m-view .m-list-row').length === 7,
+    ok('五个入口 + 退出登录都在', doc.querySelectorAll('#m-view .m-list-row').length === 6,
       '实际 ' + doc.querySelectorAll('#m-view .m-list-row').length);
-    ok('角色色点按角色分配', doc.querySelectorAll('#m-view .m-list-dot').length === 7);
+    ok('角色色点按角色分配', doc.querySelectorAll('#m-view .m-list-dot').length === 6);
+    ok('「收藏的专辑」不再在「我的」里（它是一级功能了）',
+      doc.querySelectorAll('#m-view [aria-label="收藏的专辑"]').length === 0);
 
     // 摘要异步补上
     var subs = Array.prototype.map.call(doc.querySelectorAll('#m-view .m-list-row .m-track-sub'),
@@ -131,14 +144,14 @@ async function run() {
       JSON.stringify(subs));
     ok('摘要里带上了数量', subs.join(' ').indexOf('个歌单') >= 0, JSON.stringify(subs));
 
-    /* ------------------------------- 3. 点我的歌单 → 我的歌单 */
+    /* ------------------------------- 3. 点我创建的歌单 → 歌单列表 */
 
-    var ref = findRef(M.snapshot().tree, 'button', '我的歌单');
+    var ref = findRef(M.snapshot().tree, 'button', '我创建的歌单');
     var r = M.act(ref, 'click');
-    ok('点我的歌单有回执', r.ok === true, JSON.stringify(r));
+    ok('点我创建的歌单有回执', r.ok === true, JSON.stringify(r));
     await wait(400);
-    ok('进入我的歌单视图', M.state.view.type === 'myplaylists', M.state.view.type);
-    ok('我的歌单列出了歌单',
+    ok('进入我创建的歌单视图', M.state.view.type === 'myplaylists', M.state.view.type);
+    ok('歌单列表列出了歌单',
       doc.querySelectorAll('#m-view .m-tile').length > 0,
       '卡片数 ' + doc.querySelectorAll('#m-view .m-tile').length);
 

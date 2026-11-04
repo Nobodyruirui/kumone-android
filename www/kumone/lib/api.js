@@ -23,47 +23,13 @@
 
     // ----- Auth -----
     /**
-     * 手机号 + 密码登录。
+     * 登录只剩**扫码**这一条路（2026-11-04 决定，见 docs/adr/0005-只保留扫码登录.md）。
      *
-     * 网易云服务端比的是**密码的 MD5**（上游 NeteaseCloudMusicApi 就是这么发的：
-     * `password` 传 md5，明文叫 `md5_password`）。
-     *
-     * 早先这里**先发明文** —— 那一次注定是错的，等于先提交了一次「错误密码」，
-     * 有可能把账号推进风控（要验证码），结果**正确密码也登不进去**。
-     * 现在改成：先 MD5，不行再退到明文。
-     *
-     * 密码的编码方式不出内核。
-     * 实测：/login/email 与 /login/password 已 404 下线，手机号这条还活着。
+     * 密码通道（`/login/cellphone`、`/login`）整条移除：网易云只剩
+     * `/login/cellphone` 一条密码通道（邮箱端点已 404 下线），而且密码登录
+     * 会反复踩风控（服务端回 `509 密码错误超过限制`），一次输错就可能锁账号一阵子。
+     * 扫码则根本不需要把密码交给本 App。
      */
-    cellphoneLogin: function (phone, password) {
-      var pwd = String(password == null ? '' : password);
-      var hashed = mod.md5hex ? mod.md5hex(pwd) : pwd;
-
-      var attempt = function (secret) {
-        return client.weapi('/login/cellphone', {
-          phone: String(phone || ''),
-          password: secret,
-          captcha: '',
-          verifyCode: '',
-          countrycode: '86'
-        }).then(function (text) {
-          var obj = JSON.parse(text);
-          if (obj && typeof obj.cookie === 'string' && obj.cookie.length) {
-            client.ingestCookieString(obj.cookie);
-          }
-          return obj;
-        });
-      };
-
-      return attempt(hashed).then(function (obj) {
-        if (!obj || obj.code === 200) return obj;
-        if (obj.code !== 502) return obj;   // 不是「账号或密码错误」，不重试
-        return attempt(pwd).then(function (obj2) {
-          if (obj2 && obj2.code === 200) return obj2;
-          return (obj2 && obj2.code === 502) ? obj2 : obj;
-        });
-      });
-    },
     qrKey: function () {
       return weapi('/login/qrcode/unikey', { type: 1 }).then(function (r) { return r.unikey; });
     },
