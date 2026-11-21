@@ -52,6 +52,7 @@ img { -webkit-user-drag: none; }
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   /* 转场时的「上一层」要相对这里定位 */
   position: relative;
@@ -67,9 +68,9 @@ img { -webkit-user-drag: none; }
   z-index: 1;
 }
 
-/* 转场时的「上一层」：旧内容搬到这里做退场动画 */
+/* 旧页面按之前的滚动位置绘制，在整个可见区域上保持不透明。 */
 #m-view-prev {
-  position: absolute;
+  position: fixed;
   inset: 0;
   z-index: 0;
   overflow: hidden;
@@ -77,42 +78,14 @@ img { -webkit-user-drag: none; }
   visibility: hidden;
   /* 旧页面底下的底色：灰的。白底会在转场里闪成一块白板。 */
   background: var(--canvas);
-  /* 与 #m-view 同 padding，旧页面在动画里不会横向跳一下 */
-  padding: 0 16px 20px;
 }
 #m-view-prev.is-active { visibility: visible; }
+#m-view-prev.is-front { z-index: 20; }
+#m-view.m-moving {
+  min-height: var(--m-motion-height, 0px);
+  background: var(--canvas);
+}
 
-/* 左滑返回时的「压暗层」：盖在上一页上面，随拖动进度变淡。
-   z-index 与 #m-view-prev 同为 0，但排在它后面 → 同层里画在上面；
-   #m-view 是 z-index 1，所以拖动中的当前页始终压在暗层之上。 */
-#m-slide-dim {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  background: #000;
-  opacity: 0;
-  pointer-events: none;
-  visibility: hidden;
-}
-#m-slide-dim.is-active { visibility: visible; }
-
-/* 页面缓存容器：离开的页面停在这里，等待被还原。
-   保持 connected（不 display:none）—— 这样在途的请求还能回填、
-   图片还能继续加载，回来时是「已经加载好的那一页」。 */
-#m-view-cache {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  overflow: hidden;
-  opacity: 0;
-  pointer-events: none;
-}
-#m-view-cache .m-page-cache {
-  position: absolute;
-  inset: 0;
-  /* 与 #m-view 同 padding：还原时不会横向跳一下 */
-  padding: 0 16px 20px;
-}
 
 /* ------------------------------------------------- 吸顶栏（大 → 小） */
 
@@ -129,26 +102,19 @@ img { -webkit-user-drag: none; }
   border-bottom: 1px solid var(--line);
 }
 
-/* 顶栏左槽：返回箭头与「我的」**并排**，两个都在。
-   「我的」的位置固定在槽位的右边（不随有没有历史而移动），
-   返回箭头出现在它左边 —— 于是「我的」在任何页面都够得着。
-   早先是「二选一」：进了二级页左槽变成返回箭头，「我的」就没了 ——
-   用户报过「找不到歌单和收藏在哪」，入口不能时有时无。
-   标题是相对**屏幕**居中的（见 #m-title），所以槽位加宽不会把标题推歪。 */
+/* 根页把「我的」贴近左边；进入二级页后最左侧让给系统习惯的返回键。 */
 #m-left {
   position: relative;
-  flex: 0 0 70px;
-  width: 70px;
-  height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 100%;
 }
 
 #m-back {
-  position: absolute;
-  left: 0;
-  top: 0;
   display: none;
-  width: 32px;
-  height: 32px;
+  width: 42px;
+  height: 100%;
   border: 1px solid transparent;
   background: none;
   color: var(--ink);
@@ -162,20 +128,17 @@ img { -webkit-user-drag: none; }
 #m-back:active { background: var(--wash); }
 #m-back svg { width: 18px; height: 18px; }
 
-/* 左上角常驻的「我的」：一个小圆按钮（列表图标）。
-   跟返回箭头并排在同一个槽位里，位置固定。 */
+/* 可见文字让自建歌单的入口在首次使用时也可辨认。 */
 #m-mine {
-  position: absolute;
-  right: 0;
-  top: 0;
   display: none;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
-  padding: 0;
+  height: 38px;
+  gap: 5px;
+  padding: 0 10px;
+  font: 600 var(--fs-caption) var(--font);
   border: 1px solid var(--line);
-  border-radius: 50%;
+  border-radius: var(--radius-pill);
   background: var(--surface);
   color: var(--ink);
   cursor: pointer;
@@ -191,7 +154,7 @@ img { -webkit-user-drag: none; }
      跟着剩余空间居中的话，标题会明显偏左。 */
   position: absolute;
   left: 50%;
-  max-width: 46%;
+  max-width: max(0px, calc(100% - 260px));
   text-align: center;
   font-size: var(--fs-sub);
   font-weight: 600;
@@ -209,7 +172,7 @@ img { -webkit-user-drag: none; }
 #m-header-right {
   /* 账号区要放得下「头像 + 昵称」，所以不能锁死 32px */
   min-width: 32px;
-  max-width: 46%;
+  max-width: min(120px, 36%);
   margin-left: auto;
   display: flex;
   justify-content: flex-end;
@@ -338,6 +301,16 @@ img { -webkit-user-drag: none; }
   color: var(--ink);
 }
 #m-mini-open:active { opacity: 0.7; }
+#m-mini-open::after {
+  content: '';
+  width: 7px;
+  height: 7px;
+  flex-shrink: 0;
+  margin: 4px 6px 0 0;
+  border: solid var(--ink-2);
+  border-width: 1.5px 1.5px 0 0;
+  transform: rotate(-45deg);
+}
 
 #m-mini-cover {
   width: 40px;
@@ -704,11 +677,18 @@ body.m-np #m-main { padding-bottom: 24px; }
   z-index: 120;
   display: flex;
   align-items: flex-end;
+  isolation: isolate;
+}
+.m-sheet-mask::before {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  content: '';
   background: rgba(10, 10, 10, 0.26);
   opacity: 0;
-  transition: opacity .22s ease;
+  transition: opacity .16s ease;
 }
-.m-sheet-mask.is-open { opacity: 1; }
+.m-sheet-mask.is-open::before { opacity: 1; }
 
 .m-sheet {
   width: 100%;
@@ -721,10 +701,13 @@ body.m-np #m-main { padding-bottom: 24px; }
   box-shadow: var(--shadow-pop);
   padding: 10px 16px calc(18px + var(--safe-b));
   transform: translate3d(0, 100%, 0);
-  transition: transform .28s cubic-bezier(.32, .72, 0, 1);
+  transition: transform .18s cubic-bezier(.2, .75, .2, 1);
   will-change: transform;
 }
 .m-sheet-mask.is-open .m-sheet { transform: translate3d(0, 0, 0); }
+@media (prefers-reduced-motion: reduce) {
+  .m-sheet-mask::before, .m-sheet { transition: none; }
+}
 
 .m-sheet-head {
   display: flex;
@@ -1093,10 +1076,15 @@ body.m-focus #m-main { padding-bottom: 24px; }
 
 .m-np-top {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
   padding: 12px 16px 0;
 }
 .m-np-collapse {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 40px;
   border: 1px solid var(--line);
   border-radius: var(--radius-pill);
   background: var(--surface);
@@ -1107,6 +1095,18 @@ body.m-focus #m-main { padding-bottom: 24px; }
   cursor: pointer;
 }
 .m-np-collapse:active { background: var(--wash); }
+.m-np-collapse::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  margin-top: -3px;
+  border: solid currentColor;
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(45deg);
+}
+.m-np-panels { display: flex; gap: 6px; }
+.m-np-panels[hidden] { display: none; }
+.m-np-panels > .m-btn { min-height: 40px; }
 
 .m-np-body {
   display: flex;
@@ -1150,6 +1150,8 @@ body.m-focus #m-main { padding-bottom: 24px; }
 .m-np-stage {
   position: relative;
   margin-top: 14px;
+  width: min(100%, 48vh);
+  align-self: center;
 }
 .m-np-cover-btn {
   display: block;

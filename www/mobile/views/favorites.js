@@ -25,9 +25,7 @@
       key: 'playlists',
       title: '收藏的歌单',
       note: 'favourites',
-      load: async function () {
-        var acc = await M.service.account();
-        var uid = (acc && acc.ok && acc.data) ? acc.data.userId : 0;
+      load: function (uid) {
         return M.service.favoritePlaylists(uid);
       },
       render: function (list) {
@@ -83,28 +81,48 @@
 
   M.views.favorites = {
     title: '收藏',
-    // 离开后停放：返回时不用重新拉一遍（没有订阅与轮询）。
+    // 缓存列表，返回时复核账号。账号没变时保留已显示的数据。
     cacheable: true,
 
     render: function () {
       var frag = document.createDocumentFragment();
-      frag.appendChild(ui.el('h1', { class: 'm-display' }, '收藏'));
+      var heading = ui.el('h1', { class: 'm-display' }, '收藏');
+      frag.appendChild(heading);
       frag.appendChild(ui.el('p', { class: 'm-section-note' }, 'saved by you'));
 
-      // **分区骨架同步搭好**：render 返回的 fragment 会被立刻插进 DOM，
-      // 之后再往 fragment 里 append 的节点全都进不了页面
-      // （早先这里把 appendChild 放在 isLoggedIn 的 then 里 → 两个分区根本没渲染出来）。
       var shells = SECTIONS.map(function (spec) {
         var s = section(spec);
         frag.appendChild(s.sec);
         return s;
       });
 
-      // 再问一次登录态：没登录就把两个分区都画成「登录后查看」，
-      // **不发那些注定失败的请求**（也不把人踢去登录页）。
-      Promise.resolve(M.service.isLoggedIn()).then(function (loggedIn) {
-        shells.forEach(function (s, i) { paint(s, SECTIONS[i], loggedIn); });
-      });
+      var version = 0;
+      var currentUid;
+      var accountVersion = 0;
+      function refresh() {
+        var request = ++version;
+        M.service.account().then(function (r) {
+          if (request !== version || !heading.isConnected) return;
+          if (!r.ok && !ui.LOGIN_CODES[r.code]) {
+            currentUid = undefined;
+            ++accountVersion;
+            shells.forEach(function (s) {
+              s.body.setAttribute('aria-busy', 'false');
+              s.body.replaceChildren(ui.errorCard(r, { onRetry: refresh }));
+            });
+            return;
+          }
+          var uid = r.ok && r.data ? r.data.userId : 0;
+          if (uid === currentUid) return;
+          currentUid = uid;
+          var identity = ++accountVersion;
+          shells.forEach(function (s, i) {
+            paint(s, SECTIONS[i], uid, function () { return identity === accountVersion; });
+          });
+        });
+      }
+      heading.__refresh = refresh;
+      refresh();
 
       return frag;
     }
@@ -114,12 +132,14 @@
    * 画一个分区的内容。
    * @param {object} s section() 的返回（s.body 是内容槽）
    * @param {object} spec 分区定义
-   * @param {boolean} loggedIn
+   * @param {number} uid
    */
-  function paint(s, spec, loggedIn) {
+  function paint(s, spec, uid, isCurrent) {
     var what = spec.key === 'playlists' ? '歌单' : '专辑';
+    s.body.textContent = '';
 
-    if (!loggedIn) {
+    if (!uid) {
+      s.body.setAttribute('aria-busy', 'false');
       s.body.appendChild(ui.loginCard({
         note: '登录后能看到你收藏的' + what,
         onLogin: function () { M.actions.toLogin({ view: 'favorites' }); }
@@ -129,8 +149,8 @@
 
     s.body.setAttribute('aria-busy', 'true');
     s.body.appendChild(ui.skeleton(2, '加载收藏的' + what));
-    Promise.resolve(spec.load()).then(function (r) {
-      if (!s.body.isConnected) return;
+    Promise.resolve(spec.load(uid)).then(function (r) {
+      if (!s.body.isConnected || !isCurrent()) return;
       s.body.textContent = '';
       s.body.setAttribute('aria-busy', 'false');
       if (!r || r.ok !== true) {

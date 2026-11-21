@@ -82,6 +82,8 @@
       }, '收起');
       collapse.addEventListener('click', function () { M.back(); });
       top.appendChild(collapse);
+      var panels = ui.el('div', { class: 'm-np-panels', role: 'group', 'aria-label': '播放器视图', hidden: 'hidden' });
+      top.appendChild(panels);
       frag.appendChild(top);
 
       var body = ui.el('div', { class: 'm-np-body' });
@@ -91,16 +93,14 @@
 
       var empty = ui.el('div', { class: 'm-np-empty' });
       empty.appendChild(ui.el('div', { class: 'm-np-empty-title' }, '还没有在放什么'));
-      empty.appendChild(ui.el('p', { class: 'm-np-empty-note' }, '去主页或资料库挑一首，这里就会亮起来'));
+      empty.appendChild(ui.el('p', { class: 'm-np-empty-note' }, '去主页挑一首歌'));
       var goHome = ui.el('button', {
         class: 'm-btn m-btn-primary',
         type: 'button',
         'aria-label': '去主页挑歌'
       }, '去主页');
       goHome.addEventListener('click', function () {
-        M.state.history = [];
-        M.state.view = { type: 'home' };
-        M.render();
+        M.goTab('home');
       });
       empty.appendChild(goHome);
       body.appendChild(empty);
@@ -115,7 +115,7 @@
       var coverBtn = ui.el('button', {
         class: 'm-np-cover-btn',
         type: 'button',
-        'aria-label': '查看歌词'
+        'aria-label': '从封面打开歌词'
       });
       var cover = ui.cover({ url: null, alt: '封面', className: 'm-np-cover', size: 500, eager: true });
       coverBtn.appendChild(cover);
@@ -189,7 +189,6 @@
       queueBtn.addEventListener('click', function () {
         M.nav({ type: 'queue' });
       });
-      auxRow.appendChild(queueBtn);
 
       var lyricBtn = ui.el('button', {
         class: 'm-btn m-np-lyric-btn',
@@ -198,7 +197,8 @@
         'aria-pressed': 'false'
       }, '歌词');
       lyricBtn.addEventListener('click', function () { toggleLyrics(); });
-      auxRow.appendChild(lyricBtn);
+      panels.appendChild(lyricBtn);
+      panels.appendChild(queueBtn);
 
       // 播放模式：顺序 → 单曲循环 → 列表循环 → 随机
       var REPEAT_LABEL = {
@@ -270,7 +270,6 @@
         lyricBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
         lyricBtn.setAttribute('aria-label', on ? '返回封面' : '查看歌词');
         lyricBtn.textContent = on ? '封面' : '歌词';
-        coverBtn.setAttribute('aria-label', on ? '返回封面' : '查看歌词');
         if (on) {
           // 进歌词视图时把当前行滚到中间
           tickLyrics();
@@ -279,7 +278,7 @@
       }
 
       /** 取歌词（同一首歌只取一次）。 */
-      function loadLyrics(trackId) {
+      function loadLyrics(trackId, retry) {
         if (!trackId) {
           lyricState.trackId = null;
           lyricState.lines = [];
@@ -287,7 +286,7 @@
           renderLyrics();
           return;
         }
-        if (lyricState.trackId === trackId) return;
+        if (lyricState.trackId === trackId && !retry) return;
         lyricState.trackId = trackId;
         lyricState.loading = true;
         lyricState.error = null;
@@ -329,6 +328,9 @@
         }
         if (lyricState.error) {
           lyricPanel.appendChild(ui.el('div', { class: 'm-lyrics-note' }, '歌词加载失败'));
+          lyricPanel.appendChild(ui.button('重试歌词', 'secondary', function () {
+            loadLyrics(lyricState.trackId, true);
+          }));
           return;
         }
         if (!lyricState.lines.length) {
@@ -367,7 +369,9 @@
         var row = lyricPanel.querySelector('.m-lyric-line[data-index="' + lyricState.activeIndex + '"]');
         if (!row || !row.scrollIntoView) return;
         try {
-          row.scrollIntoView({ block: 'center', behavior: force ? 'auto' : 'smooth' });
+          var top = row.offsetTop - (lyricPanel.clientHeight - row.offsetHeight) / 2;
+          var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+          lyricPanel.scrollTo({ top: top, behavior: force || reduced ? 'instant' : 'smooth' });
         } catch (_) {
           row.scrollIntoView(false);
         }
@@ -412,13 +416,11 @@
         }
       }
 
-      var lyricRafLocal = null;
       function loopLyrics() {
         tickLyrics();
-        lyricRafLocal = requestAnimationFrame(loopLyrics);
+        lyricRaf = requestAnimationFrame(loopLyrics);
       }
       if (lyricRaf) { cancelAnimationFrame(lyricRaf); lyricRaf = null; }
-      lyricRaf = lyricRafLocal;
 
       coverBtn.addEventListener('click', function () { toggleLyrics(); });
       applyLyricMode();
@@ -436,6 +438,7 @@
         if (!snap) return;
 
         var has = !!snap.track;
+        panels.hidden = !has;
         empty.hidden = has;
         live.hidden = !has;
         if (!has) return;

@@ -96,6 +96,8 @@
       /* -------------------------------------------------------- 逻辑 */
 
       var suggestTimer = null;
+      var suggestVersion = 0;
+      var searchVersion = 0;
 
       function clearSuggest() {
         suggestBox.textContent = '';
@@ -143,11 +145,13 @@
       }
 
       function onInput() {
+        var version = ++suggestVersion;
         var kw = (input.value || '').trim();
         if (suggestTimer) clearTimeout(suggestTimer);
         if (!kw) { clearSuggest(); return; }
         suggestTimer = setTimeout(function () {
           Promise.resolve(M.service.searchSuggest(kw)).then(function (r) {
+            if (version !== suggestVersion) return;
             if (!r || r.ok !== true) { clearSuggest(); return; }
             showSuggest(r.data || {});
           });
@@ -155,20 +159,25 @@
       }
 
       function doSearch(kw) {
+        var version = ++searchVersion;
+        ++suggestVersion;
+        clearTimeout(suggestTimer);
+        clearSuggest();
         kw = (kw || '').trim();
         if (!kw) {
+          keyword = '';
+          body.setAttribute('aria-busy', 'false');
           body.textContent = '';
           body.appendChild(ui.emptyNote('输入点什么再搜'));
           return;
         }
         keyword = kw;
-        clearSuggest();
         body.textContent = '';
         body.setAttribute('aria-busy', 'true');
         body.appendChild(ui.skeleton(3, '搜索中'));
 
         Promise.resolve(M.service.search(kw, type, 30, 0)).then(function (r) {
-          if (!body.isConnected) return;
+          if (!body.isConnected || version !== searchVersion) return;
           body.setAttribute('aria-busy', 'false');
           body.textContent = '';
 
@@ -218,7 +227,7 @@
           body.appendChild(ui.el('div', { class: 'm-result-note' }, '歌单 ' + (counts.playlists || playlists.length) + ' 个'));
           body.appendChild(grid(playlists, '歌单', function (p) { M.actions.openPlaylist(p); }));
         }).catch(function (e) {
-          if (!body.isConnected) return;
+          if (!body.isConnected || version !== searchVersion) return;
           body.setAttribute('aria-busy', 'false');
           body.textContent = '';
           body.appendChild(ui.errorCard(M.errors.make('KUMONE_NETWORK', {
@@ -258,7 +267,7 @@
 
       // 大家都在搜：默认词做成可点的提示
       Promise.resolve(M.service.searchDefaultKeyword()).then(function (r) {
-        if (!r || r.ok !== true || !r.data) return;
+        if (suggestVersion || !r || r.ok !== true || !r.data) return;
         var chip = ui.el('button', {
           class: 'm-suggest-chip',
           type: 'button',

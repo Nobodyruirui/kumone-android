@@ -319,16 +319,18 @@
     var u = url;
     if (u && M.normalize && M.normalize.imageUrl) u = M.normalize.imageUrl(u, size);
     if (!u) {
+      img.removeAttribute('data-cdn-first');
       img.setAttribute('src', COVER_PLACEHOLDER);
       img.classList.add('is-missing');
       img.classList.add('is-loaded');
       return;
     }
+    // 播放进度刷新时继续使用已经选好的 CDN 节点或占位图。
+    if (img.getAttribute('data-cdn-first') === u) return;
+    img.setAttribute('data-cdn-first', u);
     img.classList.remove('is-missing');
     if (img.getAttribute('src') !== u) {
       img.setAttribute('data-cdn-tries', '0');
-      // 记下第一次请求的地址：换节点重试后还能看出原本要的是哪张
-      if (!img.getAttribute('data-cdn-first')) img.setAttribute('data-cdn-first', u);
       img.setAttribute('src', u);
     }
     if (img.complete && img.naturalWidth > 0) img.classList.add('is-loaded');
@@ -443,7 +445,7 @@
     });
     var head = el('div', { class: 'm-sheet-head' });
     head.appendChild(el('span', { class: 'm-sheet-title' }, opts.title || ''));
-    var closeBtn = el('button', { class: 'm-sheet-close', type: 'button', 'aria-label': '关闭' }, '×');
+    var closeBtn = el('button', { class: 'm-sheet-close', type: 'button', 'data-dismiss': '', 'aria-label': '关闭' }, '×');
     head.appendChild(closeBtn);
     var bodyEl = el('div', { class: 'm-sheet-body' });
     box.appendChild(head);
@@ -451,21 +453,28 @@
     mask.appendChild(box);
     document.body.appendChild(mask);
 
-    var opened = false;
+    var closing = false;
     function open() {
-      if (opened) return;
-      opened = true;
-      mask.classList.add('is-open');
+      if (!closing) mask.classList.add('is-open');
     }
     // 入场动画：rAF 不触发时靠定时器兜底（否则面板永远半透明）
     if (typeof requestAnimationFrame === 'function') requestAnimationFrame(open);
     setTimeout(open, 24);
 
     function close() {
+      if (closing) return;
+      closing = true;
+      mask.setAttribute('aria-hidden', 'true');
+      box.inert = true;
       mask.classList.remove('is-open');
-      setTimeout(function () {
-        if (mask.parentNode) mask.parentNode.removeChild(mask);
-      }, 260);
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        mask.remove();
+        return;
+      }
+      box.addEventListener('transitionend', function (event) {
+        if (event.target === box && event.propertyName === 'transform') mask.remove();
+      });
+      setTimeout(function () { mask.remove(); }, 220);
     }
     closeBtn.addEventListener('click', close);
     mask.addEventListener('click', function (e) {

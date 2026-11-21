@@ -19,9 +19,11 @@
 
   var ui = M.ui;
   var timer = null;
+  var returnTimer = null;
 
   function stopTimer() {
     if (timer) { clearInterval(timer); timer = null; }
+    clearTimeout(returnTimer);
   }
 
   /** 登录成功后的收尾：刷新账号区，并回到被打断的地方。 */
@@ -31,12 +33,13 @@
     // 送回原处：被打断的目标优先（「收藏」会带 resume:{view:'favorites'}），
     // 没有目标才退回栈里那个视图
     var resume = (view && view.resume) || null;
-    if (resume && resume.view) {
+    var previous = M.state.history[M.state.history.length - 1];
+    if (resume && resume.view && (!previous || previous.type !== resume.view)) {
       M.state.history = [];
       M.state.view = { type: resume.view };
       M.render();
     } else {
-      M.back();
+      M.back({ reuse: false });
     }
   }
 
@@ -52,14 +55,17 @@
       var panel = ui.el('div', { class: 'm-login-panel' });
       frag.appendChild(panel);
 
-      // 先问一次登录态：已登录就显示「当前账号 + 退出登录」，
-      // 别让用户对着一个已登录的账号再扫一次码。
-      Promise.resolve(M.service.isLoggedIn()).then(function (loggedIn) {
-        if (!panel.isConnected) return;
-        panel.textContent = '';
-        if (loggedIn) paintSignedIn(panel);
-        else paintScan(panel);
-      });
+      function readAccount() {
+        panel.replaceChildren(ui.el('p', { class: 'm-login-status', role: 'status' }, '正在检查账号…'));
+        M.service.account().then(function (r) {
+          if (M.state.view !== view || !panel.isConnected) return;
+          panel.textContent = '';
+          if (r.ok && r.data && r.data.userId) paintSignedIn(panel, r.data);
+          else if (r.ok || ui.LOGIN_CODES[r.code]) paintScan(panel, view);
+          else panel.appendChild(ui.errorCard(r, { onRetry: readAccount }));
+        });
+      }
+      readAccount();
 
       return frag;
     },
@@ -68,45 +74,40 @@
 
   /* ---------------------------------------------- 已登录：账号 + 退出 */
 
-  function paintSignedIn(body) {
-    Promise.resolve(M.service.account()).then(function (r) {
-      if (!body.isConnected) return;
-      var acc = (r && r.ok && r.data) ? r.data : null;
-      var who = acc && acc.nickname ? acc.nickname : '当前账号';
+  function paintSignedIn(body, acc) {
+    var view = M.state.view;
+    var who = acc.nickname || '当前账号';
 
-      var card = ui.el('div', { class: 'm-card m-login-card', role: 'group', 'aria-label': '当前账号' });
-      card.appendChild(ui.el('div', { class: 'm-login-ok' }, '已登录：' + who));
-      card.appendChild(ui.el('div', { class: 'm-login-note' },
-        '退出登录只清除本机缓存的登录状态'));
-      body.appendChild(card);
+    var card = ui.el('div', { class: 'm-card m-login-card', role: 'group', 'aria-label': '当前账号' });
+    card.appendChild(ui.el('div', { class: 'm-login-ok' }, '已登录：' + who));
+    card.appendChild(ui.el('div', { class: 'm-login-note' }, '退出登录只清除本机缓存的登录状态'));
+    body.appendChild(card);
 
-      var actions = ui.el('div', { class: 'm-err-actions' });
-      actions.appendChild(ui.button('退出登录', '', function () {
-        if (M.actions && M.actions.confirmLogout) M.actions.confirmLogout();
-      }));
-      actions.appendChild(ui.button('切换账号', 'primary', function () {
-        Promise.resolve(M.service.logout()).then(function () {
-          if (M.actions && M.actions.refreshAccount) M.actions.refreshAccount();
-          if (!body.isConnected) return;
-          body.textContent = '';
-          // 换账号 = 退出后重新扫码
-          paintScan(body);
-        });
-      }));
-      body.appendChild(actions);
-    });
+    var actions = ui.el('div', { class: 'm-err-actions' });
+    actions.appendChild(ui.button('退出登录', '', function () {
+      if (M.actions && M.actions.confirmLogout) M.actions.confirmLogout();
+    }));
+    actions.appendChild(ui.button('切换账号', 'primary', function () {
+      M.service.logout().then(function () {
+        if (M.actions && M.actions.refreshAccount) M.actions.refreshAccount();
+        if (!body.isConnected || M.state.view !== view) return;
+        body.textContent = '';
+        paintScan(body, view);
+      });
+    }));
+    body.appendChild(actions);
   }
 
   /* ---------------------------------------------- 扫码登录 */
 
-  function paintScan(body) {
+  function paintScan(body, view) {
     var machine = M.loginMachine.createMachine({
       service: M.service,
       onChange: function (snap) { paint(snap); }
     });
 
     function paint(snap) {
-      if (!body.isConnected) return;
+      if (!body.isConnected || M.state.view !== view) return;
       body.textContent = '';
 
       if (snap.phase === 'fetching' || snap.phase === 'idle') {
@@ -129,15 +130,8 @@
       }
 
       if (snap.phase === 'success') {
-        body.appendChild(ui.el('div', { class: 'm-login-status m-login-ok' }, '登录成功'));
-        Promise.resolve(M.service.account()).then(function (acc) {
-          if (!acc || acc.ok !== true) return;
-          if (acc.data && acc.data.nickname) {
-            body.appendChild(ui.el('div', { class: 'm-login-account' },
-              '已登录：' + acc.data.nickname));
-          }
-        });
-        setTimeout(function () { onLoggedIn(M.state.view); }, 600);
+        stopTimer();
+        confirmAccount();
         return;
       }
 
@@ -163,6 +157,25 @@
         actions.appendChild(ui.button('刷新二维码', 'primary', function () { machine.refresh(); }));
         body.appendChild(actions);
       }
+    }
+
+    function confirmAccount() {
+      body.replaceChildren(ui.el('p', { class: 'm-login-status', role: 'status' }, '正在确认登录…'));
+      M.service.account().then(function (r) {
+        if (!body.isConnected || M.state.view !== view) return;
+        if (r.ok && r.data && r.data.userId) {
+          body.replaceChildren(ui.el('div', { class: 'm-login-status m-login-ok' }, '登录成功'));
+          returnTimer = setTimeout(function () {
+            if (M.state.view === view) onLoggedIn(view);
+          }, 600);
+          return;
+        }
+        var err = M.errors.make('KUMONE_NETWORK', {
+          state: '已收到扫码授权，暂未确认账号',
+          next: '重试确认登录'
+        });
+        body.replaceChildren(ui.errorCard(err, { onRetry: confirmAccount }));
+      });
     }
 
     machine.start();

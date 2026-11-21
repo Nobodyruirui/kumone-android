@@ -96,7 +96,10 @@ async function run() {
 
     /* --- 2. 进播放页 --- */
     M.nav({ type: 'nowplaying' });
-    await wait(700);
+    await wait(70);
+    var ghost = doc.getElementById('m-view-prev');
+    ok('程序打开播放页时不会保留半张上一页', !ghost || !ghost.classList.contains('is-active'));
+    await wait(630);
     ok('进了播放页', M.state.view.type === 'nowplaying', M.state.view.type);
 
     /* --- 3. 返回：主页必须**立刻**是完整的那一页 --- */

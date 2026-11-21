@@ -54,14 +54,11 @@
     var main = document.getElementById('m-main');
     var h = el('header', { id: 'm-header', role: 'banner' });
     h.innerHTML =
-      // 左边是一个**固定宽度**的槽位：返回箭头与「我的」图标二选一。
-      // （早先两个按钮各占一格，而看不见的那个还占着位置，
-      //   把「我的」顶到了离屏幕边缘半厘米的地方。）
       '<div id="m-left">' +
       '<button id="m-back" type="button" aria-label="返回">' + SVG.back + '</button>' +
       // 左上角常驻的「我的」：点开是抽屉（我创建的歌单 / 喜欢的音乐 / 云盘 / …）
       '<button id="m-mine" type="button" class="m-mine-btn" aria-label="我的">' +
-      '<span class="m-mine-ico" aria-hidden="true">' + SVG.library + '</span>' +
+      '<span class="m-mine-ico" aria-hidden="true">' + SVG.library + '</span>我的' +
       '</button>' +
       '</div>' +
       '<div id="m-title" role="heading" aria-level="1"></div>' +
@@ -313,7 +310,7 @@
 
       var row = el('div', { class: 'm-modal-actions' });
       var cancel = el('button', {
-        class: 'm-btn', type: 'button', 'aria-label': opts.cancelText || '取消'
+        class: 'm-btn', type: 'button', 'data-dismiss': '', 'aria-label': opts.cancelText || '取消'
       }, opts.cancelText || '取消');
       var ok = el('button', {
         class: 'm-btn m-btn-primary', type: 'button', 'aria-label': opts.okText || '确定'

@@ -124,6 +124,9 @@
     };
 
     audio.volume = state.volume;
+    var loadedEntry = null;
+    var shouldPlay = false;
+    var endTimer = null;
 
     /* ------------------------------------------------------ 事件订阅 */
 
@@ -162,7 +165,7 @@
      */
     function publishNativeMedia(snap) {
       if (!nativeMedia || typeof nativeMedia.publish !== 'function') return;
-      var key = (snap.track ? snap.track.id : 0) + '|' + (snap.playing ? '1' : '0');
+      var key = JSON.stringify([snap.track && snap.track.id, snap.playing, snap.cover]);
       var now = Date.now();
       if (key === nativeKey && now - nativeAt < 4000) return;
       nativeKey = key;
@@ -395,17 +398,40 @@
 
     async function loadCurrent(autoplay) {
       var entry = currentEntry();
-      if (!entry) return snapshot();
       var generation = ++state.generation;
+      clearTimeout(endTimer);
+      shouldPlay = autoplay !== false;
+      loadedEntry = null;
+      state.lastError = null;
+      if (audio) audio.pause();
       persist();
       emit();
-      return resolveAndPlay(entry.track, generation, autoplay !== false);
+      if (!entry) return snapshot();
+      fillMissingCover(entry, generation);
+      return resolveAndPlay(entry, generation);
+    }
+
+    function fillMissingCover(entry, generation) {
+      if (coverOf(entry.track) || typeof service.songDetails !== 'function') return;
+      Promise.resolve().then(function () { return service.songDetails([entry.track.id]); }).then(function (r) {
+        if (generation !== state.generation || !r || !r.ok || !Array.isArray(r.data)) return;
+        var detail = r.data.find(function (row) { return String(row.id) === String(entry.track.id); });
+        if (!coverOf(detail)) return;
+        entry.track = Object.assign({}, entry.track, { cover: coverOf(detail) });
+        if (loadedEntry === entry) {
+          recordHistory(entry.track);
+          persist();
+          updateMediaSession(entry.track);
+        }
+        emit();
+      }).catch(function () {});
     }
 
     /**
      * 取播放地址并播放。音质降级：请求音质 → 依次回退 → 都没有就报契约错误。
      */
-    async function resolveAndPlay(track, generation, autoplay) {
+    async function resolveAndPlay(entry, generation) {
+      var track = entry.track;
       var levels = QUALITY_FALLBACK.slice();
       // 把当前请求音质放在最前面
       if (state.quality && levels.indexOf(state.quality) < 0) levels.unshift(state.quality);
@@ -481,18 +507,20 @@
       state.lastError = null;
       state.consecutiveFailures = 0;
       state.servedQuality = last.data.level || levels[levels.length - 1];
-      recordHistory(track);
+      loadedEntry = entry;
+      recordHistory(entry.track);
       if (audio) {
         audio.src = last.data.url;
         if (state.restoreTime != null && state.restoreTime > 0) {
-          state.restoreTime = null;
           try { audio.currentTime = state.restoreTime; } catch (_) {}
+          state.restoreTime = null;
         }
-        if (autoplay && audio.play) {
+        if (shouldPlay && audio.play) {
           try { await audio.play(); } catch (_) {}
         }
       }
-      updateMediaSession(track, last.data);
+      if (generation !== state.generation) return snapshot();
+      updateMediaSession(entry.track);
       emit();
       return snapshot();
     }
@@ -549,12 +577,16 @@
         emit();
         return snapshot();
       }
+      if (loadedEntry !== currentEntry()) return loadCurrent(true);
+      shouldPlay = true;
       if (audio && audio.play) { try { await audio.play(); } catch (_) {} }
       emit();
       return snapshot();
     }
 
     function pause() {
+      shouldPlay = false;
+      clearTimeout(endTimer);
       if (audio && audio.pause) audio.pause();
       emit();
       return snapshot();
@@ -665,17 +697,22 @@
      * 后台续播失败多半是网络被限流（Doze / 厂商省电），
      * 所以失败时**重试几次**：别让「一首歌放完」变成「音乐停了」。
      */
-    var endRetry = 0;
+    function retryAfterEnd(generation, retries, snap) {
+      if (!shouldPlay || generation !== state.generation || !snap.error ||
+          snap.error.kind !== 'transient' || !retries) return;
+      endTimer = setTimeout(function () {
+        if (!shouldPlay || generation !== state.generation) return;
+        var loading = loadCurrent(true);
+        var retryGeneration = state.generation;
+        loading.then(function (retry) { retryAfterEnd(retryGeneration, retries - 1, retry); });
+      }, 2500);
+    }
+
     function advanceAfterEnd() {
-      return next(false).then(function (snap) {
-        if (snap && snap.error && snap.error.kind === 'transient' && endRetry < 3) {
-          endRetry++;
-          setTimeout(advanceAfterEnd, 2500);
-          return snap;
-        }
-        endRetry = 0;
-        return snap;
-      });
+      if (!shouldPlay || loadedEntry !== currentEntry()) return;
+      var advance = next(false);
+      var generation = state.generation;
+      advance.then(function (snap) { retryAfterEnd(generation, 3, snap); });
     }
 
     if (audio && typeof audio.addEventListener === 'function') {

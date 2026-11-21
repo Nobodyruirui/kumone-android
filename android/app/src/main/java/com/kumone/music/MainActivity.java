@@ -2,11 +2,17 @@ package com.kumone.music;
 
 import android.os.Build;
 import android.os.Bundle;
+import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
 import android.view.View;
 import android.view.Window;
-import android.view.WindowInsetsController;
 
 import androidx.activity.OnBackPressedCallback;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
 
 import com.getcapacitor.BridgeActivity;
 
@@ -25,8 +31,7 @@ import com.getcapacitor.BridgeActivity;
  */
 public class MainActivity extends BridgeActivity {
 
-    /** 画布色：与 CSS 里的 --canvas 一致（#f4f4f6）。 */
-    private static final int CANVAS = 0xFFF4F4F6;
+    private static final int SYSTEM_BAR_SURFACE = 0xFFE9E9EE;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -46,36 +51,28 @@ public class MainActivity extends BridgeActivity {
         }
     }
 
-    /**
-     * 系统栏：状态栏那一块要和画布同色，图标要是深色的。
-     *
-     * 真机报「状态栏是白色的，跟最顶上融在一起了」—— 两个原因叠在一起：
-     *   1. Android 15 强制 edge-to-edge，Capacitor 给 WebView 加了系统栏边距，
-     *      于是状态栏那条露出来的是**窗口背景**（启动图是白的）→ 一条白带。
-     *   2. 启动主题的图标是浅色（白）→ 白底白图标，等于看不见。
-     *
-     * 修法：窗口背景改成画布色，状态栏图标改成深色。
-     */
     private void applySystemBars() {
-        Window w = getWindow();
-        // API 31+ 的启动图是独立的窗口，所以窗口背景改成纯色不会影响启动画面
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            w.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(CANVAS));
-        } else {
-            w.setStatusBarColor(CANVAS);
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            WindowInsetsController controller = w.getInsetsController();
-            if (controller != null) {
-                controller.setSystemBarsAppearance(
-                        WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS,
-                        WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS);
-            }
-        } else {
-            int flags = w.getDecorView().getSystemUiVisibility();
-            flags |= View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
-            w.getDecorView().setSystemUiVisibility(flags);
-        }
+        if (bridge == null) return;
+        Window window = getWindow();
+        WindowCompat.setDecorFitsSystemWindows(window, false);
+        window.setBackgroundDrawable(new ColorDrawable(SYSTEM_BAR_SURFACE));
+        window.setStatusBarColor(Color.TRANSPARENT);
+        window.setNavigationBarColor(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+                ? Color.TRANSPARENT : Color.BLACK);
+        WindowInsetsControllerCompat bars = WindowCompat.getInsetsController(window, window.getDecorView());
+        bars.setAppearanceLightStatusBars(true);
+        bars.setAppearanceLightNavigationBars(true);
+
+        // 由一处原生容器为状态栏、刘海、导航栏和键盘统一腾出空间。
+        View container = (View) bridge.getWebView().getParent();
+        container.setBackgroundColor(SYSTEM_BAR_SURFACE);
+        ViewCompat.setOnApplyWindowInsetsListener(container, (view, insets) -> {
+            Insets safe = insets.getInsets(WindowInsetsCompat.Type.systemBars()
+                    | WindowInsetsCompat.Type.displayCutout() | WindowInsetsCompat.Type.ime());
+            view.setPadding(safe.left, safe.top, safe.right, safe.bottom);
+            return WindowInsetsCompat.CONSUMED;
+        });
+        ViewCompat.requestApplyInsets(container);
     }
 
     @Override

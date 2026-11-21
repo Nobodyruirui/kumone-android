@@ -62,10 +62,12 @@ function fakeService(overrides) {
     // 搜索
     search: function () {
       return Promise.resolve({ ok: true, data: {
-        songs: [TRACK], albums: [{ id: 4, name: '搜到的专辑', pic: '', artistName: '甲' }],
+        songs: Array.from({ length: 20 }, function (_, i) {
+          return Object.assign({}, TRACK, { id: 100 + i, name: TRACK.name + ' ' + (i + 1) });
+        }), albums: [{ id: 4, name: '搜到的专辑', pic: '', artistName: '甲' }],
         artists: [{ id: 3, name: '搜到的歌手', pic: '', alias: [] }],
         playlists: [PL],
-        counts: { songs: 1, albums: 1, artists: 1, playlists: 1 }
+        counts: { songs: 20, albums: 1, artists: 1, playlists: 1 }
       }});
     },
     searchSuggest: function () {
@@ -172,6 +174,15 @@ async function run() {
       ok('搜出了结果', /单曲/.test(doc.getElementById('m-view').textContent),
         doc.getElementById('m-view').textContent.slice(0, 120));
       ok('结果里有可播的曲目行', doc.querySelectorAll('#m-view .m-track-btn').length > 0);
+      var main = doc.getElementById('m-main');
+      main.scrollTop = 420;
+      var before = main.scrollTop;
+      doc.getElementById('m-mini-open').click();
+      doc.querySelector('#m-view [aria-label="收起"]').click();
+      ok('快速展开收起后保持查询、结果与非零位置',
+        before > 0 && before === main.scrollTop &&
+        doc.querySelector('#m-view .m-search-input').value === '周杰伦' &&
+        doc.querySelectorAll('#m-view .m-track-btn').length === 20);
     }
 
     /* ------------------------------- 3. 白名单仍然是硬的 */

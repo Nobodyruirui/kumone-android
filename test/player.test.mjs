@@ -331,21 +331,42 @@ check('放完自动切下一首：原生桥也更新了',
 await player.pause();
 check('暂停后 playbackState=paused', fakeMediaSession.playbackState === 'paused', fakeMediaSession.playbackState);
 
-// 后台续播失败（网络被限流）时要有重试，不能就此停下
-let flaky = 0;
-service = {
-  songUrl: () => {
-    flaky++;
-    if (flaky <= 1) return Promise.resolve({ ok: false, code: 'KUMONE_NETWORK', kind: 'transient' });
-    return Promise.resolve({ ok: true, data: { url: 'https://x/flaky.mp3', level: 'standard' } });
+for (const pauseDuringRetry of [false, true]) {
+  let offline = true;
+  const requested = [];
+  service = {
+    songUrl: async (id, level) => {
+      requested.push(id);
+      if (id === 4 && offline) return { ok: false, code: 'KUMONE_NETWORK', kind: 'transient' };
+      return { ok: true, data: { url: 'https://x/' + id + '.mp3', level } };
+    }
+  };
+  audio = fakeAudio();
+  player = createPlayer({ service, audio, store: fakeStore(), unblock: false });
+  await player.playQueue([track(3), track(4), track(5)], 0);
+  audio.fire('ended');
+  audio.fire('ended');
+  await new Promise((r) => setTimeout(r, 40));
+  check('续播失败后仍指向队列的下一首', player.state().index === 1 && !player.state().playing);
+  const attempts = requested.length;
+  if (pauseDuringRetry) player.pause();
+  offline = false;
+  await new Promise((r) => setTimeout(r, 2600));
+  if (pauseDuringRetry) {
+    check('暂停后取消续播重试', !player.state().playing && requested.length === attempts);
+  } else {
+    check('恢复网络后重试同一首，不越过曲目', player.state().playing &&
+      player.state().index === 1 && requested.slice(attempts).join() === '4');
   }
+}
+
+service = {
+  songUrl: async () => ({ ok: true, data: { url: 'https://x/play.mp3' } }),
+  songDetails: async () => ({ ok: true, data: [track(6)] })
 };
-audio = fakeAudio();
-player = createPlayer({ service, audio, store: fakeStore() });
-await player.playQueue([track(3), track(4)], 0);
-audio.fire('ended');
-await new Promise((r) => setTimeout(r, 120));
-check('续播失败会重试（不是直接停）', flaky >= 2, 'flaky=' + flaky);
+player = createPlayer({ service, audio: fakeAudio(), store: fakeStore() });
+await player.playQueue([{ ...track(6), album: { name: '专辑' } }]);
+check('搜索结果缺图时用曲目详情补齐', player.state().cover === 'http://p/c.jpg');
 
 console.log(failed ? `\nPLAYER: ${failed} 项失败` : '\nPLAYER: ALL PASS ✔');
 process.exit(failed ? 1 : 0);

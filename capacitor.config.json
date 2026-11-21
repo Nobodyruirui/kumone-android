@@ -7,6 +7,6 @@
   },
   "android": {
     "backgroundColor": "#f4f4f6",
-    "adjustMarginsForEdgeToEdge": "auto"
+    "adjustMarginsForEdgeToEdge": "disable"
   }
 }

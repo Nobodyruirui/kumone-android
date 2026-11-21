@@ -53,7 +53,10 @@
   }
 
   function onTouchStart(e) {
-    if (!canGoBack()) return;
+    var M = getMobile();
+    if (drag && drag.active) M.slideBack();
+    drag = null;
+    if (!canGoBack() || e.touches.length !== 1) return;
     if (document.body && document.body.classList.contains('m-np')) return;  // 全屏播放页有自己的收起
     var t = e.touches && e.touches[0];
     if (!t) return;
@@ -64,24 +67,27 @@
       y0: t.clientY,
       dx: 0,
       t0: Date.now(),
+      view: M.state.view,
       active: false
     };
-    // 底下先摆好上一页（有缓存的话）：拖动时能看见它，原生返回手势就是这个手感
-    var M = getMobile();
-    if (M && M.slidePrepare) M.slidePrepare();
   }
 
   function onTouchMove(e) {
     if (!drag) return;
     var M = getMobile();
     var t = e.touches && e.touches[0];
-    if (!t) return;
+    if (M.state.view !== drag.view || !t || e.touches.length !== 1) {
+      if (drag.active) M.slideBack();
+      drag = null;
+      return;
+    }
     var dx = t.clientX - drag.x0;
     var dy = t.clientY - drag.y0;
 
     if (!drag.active) {
-      if (Math.abs(dx) < SLOP) return;                      // 位移不够，先攒着
-      if (Math.abs(dy) > Math.abs(dx)) { drag = null; return; }  // 纵向手势：交给页面滚动
+      if (Math.max(Math.abs(dx), Math.abs(dy)) < SLOP) return;
+      if (dx <= 0 || Math.abs(dy) > dx) { drag = null; return; }
+      M.slidePrepare();
       drag.active = true;
     }
     if (e.cancelable) e.preventDefault();
@@ -89,18 +95,18 @@
     if (M && M.slideFollow) M.slideFollow(drag.dx);
   }
 
-  function onTouchEnd() {
+  function onTouchEnd(e) {
     if (!drag) return;
     var M = getMobile();
     var d = drag;
     drag = null;
-    if (!d.active || !M) return;
+    if (!d.active || !M || d.view !== M.state.view) return;
 
     var w = (typeof window !== 'undefined' && window.innerWidth) || 390;
     var dt = Math.max(1, Date.now() - d.t0);
     var v = d.dx / dt;
 
-    if (d.dx > w * RATIO || (v > VELOCITY && d.dx > 30)) {
+    if (e.type !== 'touchcancel' && (d.dx > w * RATIO || (v > VELOCITY && d.dx > 30))) {
       // 够远了：当前页一次性推出去，上一页同时归位。
       // 早先是「先推走（0.22s 空档）→ 再让上一页进来（0.3s）」两拍，
       // 中间那一下空档就是用户说的「突兀」。
@@ -114,11 +120,6 @@
 
     // 不够远：弹回原位
     if (M.slideBack) M.slideBack();
-    // 底下那一页没被用上：**等弹回动画走完**再搬回缓存。
-    // 提前搬走的话，底下会空掉一下（页面凭空消失一瞬）。
-    setTimeout(function () {
-      if (M.slideRestorePrev) M.slideRestorePrev();
-    }, 280);
   }
 
   /** 装上手势。 */
@@ -141,6 +142,9 @@
     main.removeEventListener('touchmove', onTouchMove);
     main.removeEventListener('touchend', onTouchEnd);
     main.removeEventListener('touchcancel', onTouchEnd);
+    var M = getMobile();
+    if (drag && drag.active && M) M.slideRestorePrev();
+    drag = null;
   }
 
   return {

@@ -89,6 +89,16 @@ async function run() {
     /* ------------------------------- 1. 底部导航第四键 */
 
     M.service = fakeService(false);
+    var signedIn = false;
+    M.service.account = function () {
+      return Promise.resolve({ ok: true, data: signedIn ? ACCOUNT : null });
+    };
+    M.service.qrKey = function () { return Promise.resolve({ ok: true, data: 'fake-unikey' }); };
+    M.service.qrImage = function () { return Promise.resolve({ ok: true, data: 'data:image/gif;base64,R0lGOD' }); };
+    M.service.qrCheck = function () {
+      signedIn = true;
+      return Promise.resolve({ ok: true, data: { code: 803 } });
+    };
     M.actions.refreshAccount();
     await wait(400);
 
@@ -133,12 +143,12 @@ async function run() {
 
     /* ------------------------------- 5. 已登录：内容出来 */
 
-    M.service = fakeService(true);
-    M.actions.refreshAccount();
-    M.goTab('favorites');
-    await wait(900);
+    // 原生会话可能已经能查到账号，本地 Cookie 标记仍然为 false。
+    // 等真实登录视图收到 803 并导航回来，不手动切栏目或重画。
+    for (var i = 0; i < 40 && !doc.querySelector('#m-view .m-tile'); i++) await wait(150);
 
     ok('已登录仍在收藏视图', M.state.view.type === 'favorites', M.state.view.type);
+    ok('账号栏已确认账号', !!doc.getElementById('m-account'));
     var tiles = doc.querySelectorAll('#m-view .m-tile');
     ok('收藏的歌单与收藏的专辑都列出来了', tiles.length === 2, '卡片数 ' + tiles.length);
     var names = Array.prototype.map.call(tiles, function (t) { return t.getAttribute('aria-label'); });
@@ -147,6 +157,11 @@ async function run() {
     ok('没有把「我创建的歌单」混进来',
       names.join(',').indexOf('我创建的歌单') < 0, names.join(','));
     ok('已登录时不再显示登录引导', doc.querySelectorAll('#m-view .m-login').length === 0);
+
+    doc.getElementById('m-account')?.click();
+    await wait(400);
+    ok('已有账号时打开登录页会显示账号操作', !!doc.querySelector('#m-view [aria-label="当前账号"]'));
+    ok('已有账号时不再显示扫码', !doc.querySelector('#m-view .m-login-code'));
 
     finish();
   } catch (e) {

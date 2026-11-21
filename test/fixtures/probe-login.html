@@ -67,7 +67,9 @@ async function run() {
     var qrKeys = 0;
     var phase = 'waiting';           // waiting → expired → waiting → success
     M.service.isLoggedIn = function () { return Promise.resolve(false); };
-    M.service.account = function () { return Promise.resolve({ ok: false, code: 'KUMONE_NEED_LOGIN' }); };
+    M.service.account = function () {
+      return Promise.resolve({ ok: true, data: phase === 'success' ? { userId: 42, nickname: '测试账号' } : null });
+    };
     M.service.qrKey = function () { qrKeys++; return Promise.resolve({ ok: true, data: 'fake-unikey' }); };
     M.service.qrImage = function () { return Promise.resolve({ ok: true, data: 'data:image/gif;base64,R0lGOD' }); };
     M.service.qrCheck = function () {

@@ -23,6 +23,13 @@
    * @returns {boolean} 是否由界面处理了这次返回
    */
   M.systemBack = function () {
+    var overlays = document.querySelectorAll('body > .m-modal-mask, body > .m-sheet-mask');
+    var overlay = overlays[overlays.length - 1];
+    if (overlay) {
+      var dismiss = overlay.querySelector('[data-dismiss]');
+      if (dismiss) dismiss.click();
+      return true;
+    }
     if (M.state && M.state.history && M.state.history.length) {
       M.back();
       return true;

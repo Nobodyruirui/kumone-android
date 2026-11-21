@@ -61,6 +61,8 @@ public class PlaybackService extends Service {
     private long position = 0L;
     private long duration = 0L;
     private Bitmap artwork;
+    private String requestedArtwork;
+    private final android.os.Handler mainHandler = new android.os.Handler(android.os.Looper.getMainLooper());
 
     /* ------------------------------------------------------------ 入口 */
 
@@ -190,6 +192,7 @@ public class PlaybackService extends Service {
             if (!c.equals(cover)) {
                 cover = c;
                 artwork = null;   // 换了歌：封面重新拉
+                requestedArtwork = null;
             }
         }
     }
@@ -311,8 +314,9 @@ public class PlaybackService extends Service {
      * 拉不到就算了 —— 通知里没有图而已，不影响播放。
      */
     private void loadArtwork() {
-        if (artwork != null || cover.isEmpty()) return;
+        if (artwork != null || cover.isEmpty() || cover.equals(requestedArtwork)) return;
         final String url = cover;
+        requestedArtwork = url;
         Thread t = new Thread(new Runnable() {
             @Override
             public void run() {
@@ -338,8 +342,12 @@ public class PlaybackService extends Service {
                     if (conn != null) conn.disconnect();
                 }
                 if (bitmap != null) {
-                    artwork = bitmap;
-                    updateNotification();
+                    Bitmap loaded = bitmap;
+                    mainHandler.post(() -> {
+                        if (instance != PlaybackService.this || !url.equals(cover)) return;
+                        artwork = loaded;
+                        refresh();
+                    });
                 }
             }
         }, "KumoneArt");

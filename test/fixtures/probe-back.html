@@ -83,7 +83,8 @@ async function run() {
     M.nav({ type: 'fm' });
     await wait(80);
     ok('前进后进入广播页', M.state.view.type === 'fm', M.state.view.type);
-    ok('前进时旧内容搬进了上一层容器', !!doc.getElementById('m-view-prev'));
+    var previous = doc.getElementById('m-view-prev');
+    ok('点按前进后上一页已离开过渡层', !previous || !previous.classList.contains('is-active'));
     await wait(500);
 
     /* -------------------- 2. 边缘左滑返回 -------------------- */

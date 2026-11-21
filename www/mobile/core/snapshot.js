@@ -40,8 +40,8 @@
     var id = String(ref || '').trim();
     if (!id.startsWith('@')) id = '@' + id;
     var el = live.get(id);
-    if (!el || !el.isConnected) {
-      live.delete(id);
+    if (!el || !el.isConnected || el.closest('#m-view-prev, #m-view-cache')) {
+      if (!el || !el.isConnected) live.delete(id);
       return M.errors.make('KUMONE_STALE_REF', {
         expected: 'Mobile.act("' + id + '", "click")',
         state: '引用 ' + id + ' 已不在当前界面上',

@@ -143,11 +143,6 @@ async function run() {
        mainEl && !isWhite(W.getComputedStyle(mainEl).backgroundColor),
        mainEl ? W.getComputedStyle(mainEl).backgroundColor : '（无）');
 
-    var prevEl = doc.getElementById('m-view-prev');
-    ok('#m-view-prev 底色是画布色（上一层容器不能透出白）',
-       prevEl && !isWhite(W.getComputedStyle(prevEl).backgroundColor),
-       prevEl ? W.getComputedStyle(prevEl).backgroundColor : '（无）');
-
     // 封面：加载中时底色必须是灰的 —— 白色卡片里透出一个空白洞就是一个白方块
     var coverEl = doc.querySelector('#m-mini-cover');
     if (coverEl) {
@@ -175,12 +170,20 @@ async function run() {
        parseFloat(opDuring) > 0.95, opDuring);
 
     var prevEl2 = doc.getElementById('m-view-prev');
+    ok('跟手预览底色是画布色', prevEl2 && !isWhite(W.getComputedStyle(prevEl2).backgroundColor));
     ok('拖动时底下已经摆好上一页', prevEl2 && prevEl2.classList.contains('is-active'),
        prevEl2 ? prevEl2.className : '（无）');
     ok('底下那一页有内容（不是空壳）',
        prevEl2 && prevEl2.querySelectorAll('.m-track').length >= 2,
        prevEl2 ? '曲目行 ' + prevEl2.querySelectorAll('.m-track').length : '（无）');
 
+    touch(mainEl, 'touchcancel', 180, 404);
+    await wait(280);
+    ok('系统取消手势后停在原页并清除过渡层', M.state.view.id === 9003 &&
+       !prevEl2.classList.contains('is-active') &&
+       W.getComputedStyle(doc.getElementById('m-view')).transform === 'none');
+    touch(mainEl, 'touchstart', 6, 400);
+    touch(mainEl, 'touchmove', 180, 404);
     touch(mainEl, 'touchend', 180, 404);
     await wait(1000);
     ok('左滑回到上一页', M.state.view.type === 'playlist', M.state.view.type);
@@ -190,6 +193,13 @@ async function run() {
     ok('左滑后内容已经在', doc.querySelectorAll('#m-view .m-track').length >= 2,
        'tracks=' + doc.querySelectorAll('#m-view .m-track').length);
 
+    var stableRow = doc.querySelector('#m-view .m-track-btn');
+    M.nav({ type: 'playlist', id: 9004, name: '快速返回' });
+    M.back();
+    await wait(310);
+    ok('未等入场动画结束便返回仍复用原页节点', M.state.view.id === 9001 &&
+       stableRow === doc.querySelector('#m-view .m-track-btn') &&
+       !prevEl2.classList.contains('is-active'));
     finish();
   } catch (e) {
     failures.push('异常：' + (e && e.message ? e.message : String(e)) +

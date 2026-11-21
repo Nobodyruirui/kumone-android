@@ -107,15 +107,12 @@ async function run() {
       chip ? chip.className : '（无）');
     ok('快照里能拿到它的 ref', !!findRef(M.snapshot().tree, 'button', '我的'));
 
-    // 位置：左槽里「返回箭头」在最左，「我的」在它右边，位置固定。
-    // 「我的」的按钮位置**不随页面变**（根页与二级页同一个 x）——
-    // 入口不能时有时无，也不能忽左忽右。
+    // 根页直接显示带文字的「我的」，二级页给返回键留独立点击区域。
     var backEl = doc.getElementById('m-back');
     ok('根页面上看不见返回箭头', backEl && W.getComputedStyle(backEl).display === 'none',
        backEl ? W.getComputedStyle(backEl).display : '（无）');
     var left = chip ? chip.getBoundingClientRect().left : -1;
-    ok('「我的」按钮在左槽里、返回箭头右侧', left >= 20 && left < 90, 'left=' + left);
-    var rootLeft = left;
+    ok('根页的「我的」贴近左侧并有可见文字', left >= 0 && left <= 20 && chip.innerText.trim() === '我的', 'left=' + left);
 
     /* ------------------------------- 3. 点它 → 「我的」抽屉 */
 
@@ -140,7 +137,7 @@ async function run() {
         '抽屉数 ' + doc.querySelectorAll('.m-sheet').length);
     }
 
-    /* ------------------------------- 5. 二级页：返回箭头出现，「我的」仍在原位 */
+    /* ------------------------------- 5. 二级页：返回箭头和「我的」同时可用 */
 
     var chip2 = doc.getElementById('m-mine');
     var back = doc.getElementById('m-back');
@@ -149,8 +146,7 @@ async function run() {
     ok('二级页上返回箭头出现', back && back.classList.contains('visible'),
       back ? back.className : '（无）');
     var left2 = chip2 ? chip2.getBoundingClientRect().left : -1;
-    ok('「我的」按钮位置没变（不跳动）', Math.abs(left2 - rootLeft) < 1,
-      'root=' + rootLeft + ' sub=' + left2);
+    ok('二级页的返回键与我的入口都有独立点击区', back.getBoundingClientRect().right <= left2);
     var backLeft = back ? back.getBoundingClientRect().left : -1;
     ok('返回箭头在「我的」左边', backLeft < left2, 'back=' + backLeft + ' mine=' + left2);
 
