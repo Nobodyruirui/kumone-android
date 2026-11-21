@@ -1,0 +1,122 @@
+[
+  {
+    "variant": "基线",
+    "status": "FAIL",
+    "viewport": [
+      390,
+      844
+    ],
+    "steps": [
+      "搜索到 16 首；重复快照一致，焦点、位置、播放状态和请求数稳定",
+      "迷你条与全屏均显示沿岸公路、潮间带和封面；暂停后按钮变为播放",
+      "16 首队列顺序一致，下一首为雾灯；旧 ref 失效，重取快照可返回"
+    ],
+    "snapshots": {
+      "mini": "region \"迷你播放条\" [ref=@31]\n  button \"打开播放页\" [ref=@29]\n    image \"沿岸公路 封面\" [ref=@115]\n    node\n      text \"沿岸公路\" [ref=@28]\n      text \"潮间带\" [ref=@116]\n  button \"暂停\" [ref=@30]",
+      "paused": "region \"当前页面\" [ref=@17]\n  button \"收起\" [ref=@117]\n  node\n    button \"查看歌词\" [ref=@119]\n      image \"沿岸公路 封面\" [ref=@118]\n    text \"沿岸公路\" [ref=@120]\n    text \"潮间带\" [ref=@121]\n    text \"潮汐手记\" [ref=@122]\n    node\n      text \"0:00\" [ref=@123]\n      text \"3:24\" [ref=@124]\n    slider \"进度\" [ref=@125]\n    node\n      button \"上一首\" [ref=@126]\n      button \"播放\" [ref=@127]\n      button \"下一首\" [ref=@128]\n    node\n      text \"音量\" [ref=@129]\n      slider \"音量\" [ref=@130]\n    node\n      button \"音质\" [ref=@131]\n      button \"队列\" [ref=@132]\n      button \"查看歌词\" [ref=@133]\n      button \"播放模式 · 顺序\" [ref=@134]\n      button \"加入歌单\" [ref=@135]"
+    },
+    "scrollBefore": 420,
+    "unsupported": {
+      "code": "KUMONE_UNSUPPORTED",
+      "next": "改用白名单内的动作"
+    },
+    "stale": {
+      "code": "KUMONE_STALE_REF",
+      "next": "重新取一次快照：Mobile.snapshot()"
+    },
+    "queryAfter": "潮汐",
+    "songCountAfter": 16,
+    "scrollAfter": 0,
+    "error": "返回后搜索位置变化：420 → 0 px"
+  },
+  {
+    "variant": "原型",
+    "status": "PASS",
+    "viewport": [
+      390,
+      844
+    ],
+    "steps": [
+      "搜索到 16 首；重复快照一致，焦点、位置、播放状态和请求数稳定",
+      "迷你条与全屏均显示沿岸公路、潮间带和封面；暂停后按钮变为播放",
+      "16 首队列顺序一致，下一首为雾灯；旧 ref 失效，重取快照可返回",
+      "收起后保留关键词、全部结果及顺序、暂停状态和原滚动位置"
+    ],
+    "snapshots": {
+      "mini": "region \"迷你播放条\" [ref=@31]\n  button \"打开播放页\" [ref=@29]\n    image \"沿岸公路 封面\" [ref=@115]\n    node\n      text \"沿岸公路\" [ref=@28]\n      text \"潮间带\" [ref=@116]\n  button \"暂停\" [ref=@30]",
+      "paused": "region \"当前页面\" [ref=@136]\n  button \"收起\" [ref=@117]\n  node\n    button \"查看歌词\" [ref=@119]\n      image \"沿岸公路 封面\" [ref=@118]\n    text \"沿岸公路\" [ref=@120]\n    text \"潮间带\" [ref=@121]\n    text \"潮汐手记\" [ref=@122]\n    node\n      text \"0:00\" [ref=@123]\n      text \"3:24\" [ref=@124]\n    slider \"进度\" [ref=@125]\n    node\n      button \"上一首\" [ref=@126]\n      button \"播放\" [ref=@127]\n      button \"下一首\" [ref=@128]\n    node\n      text \"音量\" [ref=@129]\n      slider \"音量\" [ref=@130]\n    node\n      button \"音质\" [ref=@131]\n      button \"队列\" [ref=@132]\n      button \"查看歌词\" [ref=@133]\n      button \"播放模式 · 顺序\" [ref=@134]\n      button \"加入歌单\" [ref=@135]"
+    },
+    "scrollBefore": 420,
+    "unsupported": {
+      "code": "KUMONE_UNSUPPORTED",
+      "next": "改用白名单内的动作"
+    },
+    "stale": {
+      "code": "KUMONE_STALE_REF",
+      "next": "重新取一次快照：Mobile.snapshot()"
+    },
+    "queryAfter": "潮汐",
+    "songCountAfter": 16,
+    "scrollAfter": 420
+  },
+  {
+    "variant": "基线",
+    "status": "FAIL",
+    "viewport": [
+      360,
+      740
+    ],
+    "steps": [
+      "搜索到 16 首；重复快照一致，焦点、位置、播放状态和请求数稳定",
+      "迷你条与全屏均显示沿岸公路、潮间带和封面；暂停后按钮变为播放",
+      "16 首队列顺序一致，下一首为雾灯；旧 ref 失效，重取快照可返回"
+    ],
+    "snapshots": {
+      "mini": "region \"迷你播放条\" [ref=@31]\n  button \"打开播放页\" [ref=@29]\n    image \"沿岸公路 封面\" [ref=@115]\n    node\n      text \"沿岸公路\" [ref=@28]\n      text \"潮间带\" [ref=@116]\n  button \"暂停\" [ref=@30]",
+      "paused": "region \"当前页面\" [ref=@17]\n  button \"收起\" [ref=@117]\n  node\n    button \"查看歌词\" [ref=@119]\n      image \"沿岸公路 封面\" [ref=@118]\n    text \"沿岸公路\" [ref=@120]\n    text \"潮间带\" [ref=@121]\n    text \"潮汐手记\" [ref=@122]\n    node\n      text \"0:00\" [ref=@123]\n      text \"3:24\" [ref=@124]\n    slider \"进度\" [ref=@125]\n    node\n      button \"上一首\" [ref=@126]\n      button \"播放\" [ref=@127]\n      button \"下一首\" [ref=@128]\n    node\n      text \"音量\" [ref=@129]\n      slider \"音量\" [ref=@130]\n    node\n      button \"音质\" [ref=@131]\n      button \"队列\" [ref=@132]\n      button \"查看歌词\" [ref=@133]\n      button \"播放模式 · 顺序\" [ref=@134]\n      button \"加入歌单\" [ref=@135]"
+    },
+    "scrollBefore": 420,
+    "unsupported": {
+      "code": "KUMONE_UNSUPPORTED",
+      "next": "改用白名单内的动作"
+    },
+    "stale": {
+      "code": "KUMONE_STALE_REF",
+      "next": "重新取一次快照：Mobile.snapshot()"
+    },
+    "queryAfter": "潮汐",
+    "songCountAfter": 16,
+    "scrollAfter": 0,
+    "error": "返回后搜索位置变化：420 → 0 px"
+  },
+  {
+    "variant": "原型",
+    "status": "PASS",
+    "viewport": [
+      360,
+      740
+    ],
+    "steps": [
+      "搜索到 16 首；重复快照一致，焦点、位置、播放状态和请求数稳定",
+      "迷你条与全屏均显示沿岸公路、潮间带和封面；暂停后按钮变为播放",
+      "16 首队列顺序一致，下一首为雾灯；旧 ref 失效，重取快照可返回",
+      "收起后保留关键词、全部结果及顺序、暂停状态和原滚动位置"
+    ],
+    "snapshots": {
+      "mini": "region \"迷你播放条\" [ref=@31]\n  button \"打开播放页\" [ref=@29]\n    image \"沿岸公路 封面\" [ref=@115]\n    node\n      text \"沿岸公路\" [ref=@28]\n      text \"潮间带\" [ref=@116]\n  button \"暂停\" [ref=@30]",
+      "paused": "region \"当前页面\" [ref=@136]\n  button \"收起\" [ref=@117]\n  node\n    button \"查看歌词\" [ref=@119]\n      image \"沿岸公路 封面\" [ref=@118]\n    text \"沿岸公路\" [ref=@120]\n    text \"潮间带\" [ref=@121]\n    text \"潮汐手记\" [ref=@122]\n    node\n      text \"0:00\" [ref=@123]\n      text \"3:24\" [ref=@124]\n    slider \"进度\" [ref=@125]\n    node\n      button \"上一首\" [ref=@126]\n      button \"播放\" [ref=@127]\n      button \"下一首\" [ref=@128]\n    node\n      text \"音量\" [ref=@129]\n      slider \"音量\" [ref=@130]\n    node\n      button \"音质\" [ref=@131]\n      button \"队列\" [ref=@132]\n      button \"查看歌词\" [ref=@133]\n      button \"播放模式 · 顺序\" [ref=@134]\n      button \"加入歌单\" [ref=@135]"
+    },
+    "scrollBefore": 420,
+    "unsupported": {
+      "code": "KUMONE_UNSUPPORTED",
+      "next": "改用白名单内的动作"
+    },
+    "stale": {
+      "code": "KUMONE_STALE_REF",
+      "next": "重新取一次快照：Mobile.snapshot()"
+    },
+    "queryAfter": "潮汐",
+    "songCountAfter": 16,
+    "scrollAfter": 420
+  }
+]

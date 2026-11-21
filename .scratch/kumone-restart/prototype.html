@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f4f4f6">
+  <link rel="icon" href="data:,">
+  <title>Kumone · 搜索与播放原型</title>
+  <link rel="stylesheet" href="../../www/mobile/css/tokens.css">
+  <link rel="stylesheet" href="../../www/mobile/css/shell.css">
+</head>
+<body>
+  <div id="m-app">
+    <main id="m-main" aria-label="内容">
+      <div id="m-view" role="region" aria-label="当前页面"></div>
+    </main>
+  </div>
+
+  <!-- 在服务层与播放器初始化前装入模拟内核、音频和临时存储。 -->
+  <script src="prototype-fixture.js"></script>
+  <script src="../../www/shared/normalize.js"></script>
+  <script src="../../www/mobile/core/errors.js"></script>
+  <script src="../../www/mobile/core/service.js"></script>
+  <script src="../../www/mobile/core/ui.js"></script>
+  <script src="../../www/mobile/core/actions.js"></script>
+  <script src="../../www/mobile/core/shell.js"></script>
+  <script src="../../www/mobile/core/router.js"></script>
+  <script src="../../www/mobile/core/gesture.js"></script>
+  <script src="../../www/mobile/core/snapshot.js"></script>
+  <script src="../../www/mobile/core/player.js"></script>
+  <script src="../../www/mobile/core/login.js"></script>
+  <script src="../../www/mobile/core/lyrics.js"></script>
+  <script src="../../www/mobile/learnings/netease/tools/locator.js"></script>
+  <script src="../../www/mobile/views/home.js"></script>
+  <script src="../../www/mobile/views/detail.js"></script>
+  <script src="../../www/mobile/views/nowplaying.js"></script>
+  <script src="../../www/mobile/views/login.js"></script>
+  <script src="../../www/mobile/views/library.js"></script>
+  <script src="../../www/mobile/views/favorites.js"></script>
+  <script src="../../www/mobile/views/mylist.js"></script>
+  <script src="../../www/mobile/views/fm.js"></script>
+  <script src="../../www/mobile/views/search.js"></script>
+  <script>Mobile.state.view = { type: 'search' };</script>
+  <script src="prototype-enhancement.js"></script>
+  <script src="../../www/mobile/app.js"></script>
+  <script src="prototype-check.js"></script>
+</body>
+</html>
